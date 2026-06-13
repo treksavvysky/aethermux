@@ -46,10 +46,9 @@ async function makeEngine() {
   return { engine, store, provisioner, workspaceRoot };
 }
 
-/** Ids of all AetherMux-managed containers currently on the daemon. */
-async function managedContainerIds() {
-  const list = await docker.listContainers({ all: true, filters: { label: ['aethermux.managed=true'] } });
-  return new Set(list.map((c) => c.Id));
+/** Containers carrying a specific session label (isolation-safe under parallelism). */
+async function containersForSession(sessionLabel) {
+  return docker.listContainers({ all: true, filters: { label: [`aethermux.session=${sessionLabel}`] } });
 }
 
 /** Polls the session graph until `predicate` holds or the timeout elapses. */
@@ -191,11 +190,16 @@ test('e2e: a failed sandbox provision returns an error and leaves no orphaned co
     await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => {});
   });
 
-  const before = await managedContainerIds();
+  // The engine surfaces the provisioning error rather than swallowing it.
   await assert.rejects(
     () => engine.createSession({ repoPath: null, command: ['sh', '-c', 'echo nope'] }),
     SandboxError,
   );
-  const after = await managedContainerIds();
-  assert.deepEqual([...after], [...before], 'no orphaned containers were left behind');
+
+  // And no orphan is left behind — checked via a unique session label so this is
+  // robust to other integration tests running concurrently on the same daemon.
+  const sessionLabel = `fail-${process.pid}-${Date.now().toString(36)}`;
+  await assert.rejects(() => provisioner.create(null, sessionLabel), SandboxError);
+  const orphans = await containersForSession(sessionLabel);
+  assert.equal(orphans.length, 0, 'no orphaned container for the failed provision');
 });
