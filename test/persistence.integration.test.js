@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import pg from 'pg';
-import { SessionStore } from '../dist/index.js';
+import { SessionStore, TRUNCATION_MARKER } from '../dist/index.js';
 
 /**
  * Real-PostgreSQL exercise of the persistence layer. Runs when
@@ -119,13 +119,15 @@ test('heartbeat freshness: stale sessions are marked for cleanup', { skip }, asy
   assert.ok(freshGraph.session.lastHeartbeat.getTime() >= before);
 });
 
-test('per-agent output buffer is capped at maxBufferBytes (keeps the tail)', { skip }, async (t) => {
+test('per-agent output buffer is capped and marks truncation; small writes are verbatim', { skip }, async (t) => {
+  const cap = 64;
   const owner = await SessionStore.connect({ connectionString: url });
-  // A second store sharing the same pool but with a tiny buffer cap.
-  const capped = new SessionStore({ pool: owner.pool, maxBufferBytes: 16 });
+  // A second store sharing the same pool but with a small buffer cap.
+  const capped = new SessionStore({ pool: owner.pool, maxBufferBytes: cap });
   const sessionID = uid('buf');
   const containerID = uid('cont');
-  const agentID = uid('agent');
+  const bigAgent = uid('big');
+  const smallAgent = uid('small');
   t.after(async () => {
     await owner.destroySession(sessionID).catch(() => {});
     await owner.close();
@@ -133,13 +135,24 @@ test('per-agent output buffer is capped at maxBufferBytes (keeps the tail)', { s
 
   await capped.createSession({ sessionID });
   await capped.upsertSandbox({ containerID, sessionID, workspacePath: `/workspace/${sessionID}` });
-  await capped.upsertAgent({ agentID, sandboxID: containerID, sessionID, command: ['cat'] });
+  await capped.upsertAgent({ agentID: bigAgent, sandboxID: containerID, sessionID, command: ['cat'] });
+  await capped.upsertAgent({ agentID: smallAgent, sandboxID: containerID, sessionID, command: ['cat'] });
 
-  await capped.appendAgentOutput(agentID, 'stdout', 'x'.repeat(50));
-  await capped.appendAgentOutput(agentID, 'stdout', 'TAIL_1234567890'); // 15 chars
+  // Append well beyond the cap: the buffer must end up at/under the cap, carry
+  // the truncation marker, and retain the most-recent output.
+  await capped.appendAgentOutput(bigAgent, 'stdout', 'A'.repeat(200));
+  await capped.appendAgentOutput(bigAgent, 'stdout', 'NEWEST-OUTPUT-END');
 
   const graph = await capped.getSession(sessionID);
-  const buf = graph.agents[0].stdoutBuffer;
-  assert.equal(buf.length, 16, 'buffer capped at 16 chars');
-  assert.equal(buf, 'xTAIL_1234567890', 'most recent output retained (tail)');
+  const big = graph.agents.find((a) => a.agentID === bigAgent).stdoutBuffer;
+  assert.ok(big.length <= cap, `buffer ${big.length} must be <= cap ${cap}`);
+  assert.ok(big.startsWith(TRUNCATION_MARKER), 'truncated buffer carries the truncation marker');
+  assert.ok(big.endsWith('NEWEST-OUTPUT-END'), 'most-recent output retained at the tail');
+
+  // A write that stays under the cap is stored verbatim, with no marker.
+  await capped.appendAgentOutput(smallAgent, 'stdout', 'short line\n');
+  const graph2 = await capped.getSession(sessionID);
+  const small = graph2.agents.find((a) => a.agentID === smallAgent).stdoutBuffer;
+  assert.equal(small, 'short line\n', 'sub-cap output stored verbatim');
+  assert.ok(!small.includes(TRUNCATION_MARKER), 'no marker when under the cap');
 });

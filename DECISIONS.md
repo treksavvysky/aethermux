@@ -5,6 +5,48 @@ Each entry is an ADR (Architecture Decision Record).
 
 ---
 
+## ADR-0003 — Per-agent log buffers are bounded with a truncation marker
+
+- **Date:** 2026-06-13
+- **Status:** Accepted
+- **Issue:** AETHERMUX-10
+
+### Context
+
+The session DB stores each agent's `stdout_buffer` / `stderr_buffer` as TEXT in
+`agent_processes`. Agent output is unbounded, so without a cap Postgres would
+grow into a de-facto log store (100 MB × N agents × M sessions) — within the
+*letter* of the "DB stores only ephemeral coordination state, never files"
+boundary (logs aren't repo files) but against its *spirit*.
+
+### Decision
+
+`SessionStore.appendAgentOutput` enforces a configurable per-agent cap
+(`maxBufferBytes`, default 100 MB) **on append**, not at read time:
+
+- While the buffer is within the cap, output is appended verbatim.
+- When a write would exceed the cap, the buffer is truncated to the most-recent
+  `cap − len(marker)` characters and prefixed with the marker
+  `[aethermux: output truncated]\n` (exported as `TRUNCATION_MARKER`), then
+  clamped to the cap. The stored buffer therefore never exceeds the cap, and a
+  reader can tell that earlier output was dropped.
+
+Enforcement is a single atomic SQL `UPDATE` (last-write-wins, no transaction).
+The limit is applied in characters — equal to bytes for the ASCII terminal
+output agents typically produce.
+
+### Phase 2 question (deferred — out of scope for AETHERMUX-10)
+
+Whether bulk log *content* belongs in the session DB at all is an open design
+question. The cap stops unbounded growth, but a cleaner model may be lightweight
+log **handles** in the DB plus an ephemeral/separate **log sink** for the bytes.
+Revisit when the Phase 2 web console actually consumes these streams and the real
+read patterns (tail, scrollback, search) are known — at which point the
+handle+sink trade-off can be evaluated against concrete requirements rather than
+speculatively.
+
+---
+
 ## ADR-0002 — CI job name and main branch-protection contexts are one contract
 
 - **Date:** 2026-06-13

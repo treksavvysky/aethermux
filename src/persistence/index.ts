@@ -6,7 +6,7 @@
  * files; Git remains the source of truth.
  */
 
-export { SessionStore } from './session-store.js';
+export { SessionStore, TRUNCATION_MARKER } from './session-store.js';
 export type {
   CreateSessionInput,
   SessionPatch,

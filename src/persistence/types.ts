@@ -62,7 +62,11 @@ export interface SessionStoreConfig {
   poolMin?: number;
   /** Maximum pooled connections. Clamped to [10, 50]. Default 10. */
   poolMax?: number;
-  /** Per-agent output buffer cap in characters. Default 100 MB. */
+  /**
+   * Per-agent output buffer cap, enforced on append. Default 100 MB. Once a
+   * write would exceed it, the buffer keeps the most-recent bytes and is prefixed
+   * with a truncation marker. Applied in characters (= bytes for ASCII output).
+   */
   maxBufferBytes?: number;
   /** Heartbeat interval for {@link SessionStore.startHeartbeat}. Default 30 s. */
   heartbeatIntervalMs?: number;
