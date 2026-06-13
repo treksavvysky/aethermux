@@ -24,6 +24,13 @@ import {
   type SessionStoreConfig,
 } from './types.js';
 
+/**
+ * Prepended to an agent output buffer once the per-agent cap forces older
+ * output to be dropped, so a reader can tell the buffer is not the full history.
+ * Kept short and ASCII so it counts predictably against the byte cap.
+ */
+export const TRUNCATION_MARKER = '[aethermux: output truncated]\n';
+
 /** Input to {@link SessionStore.createSession}. */
 export interface CreateSessionInput {
   sessionID: string;
@@ -230,18 +237,33 @@ export class SessionStore {
   }
 
   /**
-   * Appends output to an agent's buffer, capping it at `maxBufferBytes` by
-   * keeping the most recent characters (done in SQL via `right()`, so it stays
-   * atomic and last-write-wins without a transaction).
+   * Appends output to an agent's buffer, enforcing the per-agent cap
+   * (`maxBufferBytes`, default 100 MB) **on append** so the database never
+   * becomes an unbounded log store.
+   *
+   * While the buffer stays within the cap it grows verbatim. Once a write would
+   * exceed the cap, the buffer is truncated to retain the most-recent bytes and
+   * a {@link TRUNCATION_MARKER} is prepended so a reader can see that earlier
+   * output was dropped. The result never exceeds the cap. The whole operation is
+   * a single atomic SQL UPDATE (last-write-wins, no transaction). The limit is
+   * applied in characters — equal to bytes for the typical ASCII terminal output
+   * agents produce.
    */
   async appendAgentOutput(agentID: string, stream: string, text: string): Promise<void> {
     if (!isOutputStream(stream)) {
       throw new PersistenceError(`Invalid output stream ${JSON.stringify(stream)}`);
     }
     const column = stream === 'stdout' ? 'stdout_buffer' : 'stderr_buffer';
+    // Under cap: append verbatim. Over cap: keep the marker + the most-recent
+    // (cap - marker) chars, then clamp to the cap so the result is never larger
+    // than the cap even for pathologically small caps.
     await this.query(
-      `UPDATE agent_processes SET ${column} = right(${column} || $2, $3) WHERE agent_id = $1`,
-      [agentID, text, this.maxBufferBytes],
+      `UPDATE agent_processes SET ${column} = CASE
+         WHEN length(${column} || $2) <= $3 THEN ${column} || $2
+         ELSE right($4 || right(${column} || $2, GREATEST($3 - length($4), 0)), $3)
+       END
+       WHERE agent_id = $1`,
+      [agentID, text, this.maxBufferBytes, TRUNCATION_MARKER],
     );
   }
 
