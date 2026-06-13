@@ -7,8 +7,10 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: lint · typecheck · build · test
+  # This job's name ("ci") IS the required status-check context on main's branch
+  # protection. The CI job name and main's required_status_checks.contexts are
+  # one contract — change them together. See DECISIONS.md (ADR-0002).
+  ci:
     runs-on: ubuntu-latest
 
     services:
