@@ -1,7 +1,14 @@
 import type { Pool, PoolConfig } from 'pg';
 
-/** Lifecycle state of a session. Stale sessions are marked for cleanup. */
-export type SessionStatus = 'active' | 'stale' | 'destroyed';
+/**
+ * Lifecycle state of a session.
+ * - `active`: running and owned by a live orchestrator.
+ * - `paused`: orchestrator shut down gracefully; recoverable on restart.
+ * - `orphaned`: recovery found the sandbox gone; needs cleanup.
+ * - `stale`: heartbeat lapsed past the threshold; marked for cleanup.
+ * - `destroyed`: torn down.
+ */
+export type SessionStatus = 'active' | 'paused' | 'orphaned' | 'stale' | 'destroyed';
 /** Lifecycle state of a sandbox container. */
 export type SandboxStatus = 'running' | 'stopped' | 'destroyed';
 /** Lifecycle state of an agent process (mirrors the orchestrator's AgentStatus). */
