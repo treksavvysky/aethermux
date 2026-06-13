@@ -171,8 +171,14 @@ export class SessionStore {
 
   /** All sessions currently in the `active` status. */
   async listActiveSessions(): Promise<Session[]> {
+    return this.listSessionsByStatus('active');
+  }
+
+  /** All sessions in a given status (e.g. `paused` during recovery). */
+  async listSessionsByStatus(status: SessionStatus): Promise<Session[]> {
     const result = await this.query<SessionRow>(
-      `SELECT * FROM sessions WHERE status = 'active' ORDER BY created_at`,
+      'SELECT * FROM sessions WHERE status = $1 ORDER BY created_at',
+      [status],
     );
     return result.rows.map(mapSessionRow);
   }

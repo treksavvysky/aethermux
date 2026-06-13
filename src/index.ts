@@ -14,3 +14,4 @@ export const PRODUCT = 'AetherMux';
 export * from './sandbox/index.js';
 export * from './orchestrator/index.js';
 export * from './persistence/index.js';
+export * from './server/index.js';

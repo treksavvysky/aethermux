@@ -14,6 +14,11 @@ export default tseslint.config(
       ecmaVersion: 2022,
       sourceType: 'module',
     },
+    // TypeScript resolves identifiers itself; core no-undef would false-positive
+    // on Node globals (process, console, setInterval, …) in source files.
+    rules: {
+      'no-undef': 'off',
+    },
   },
   {
     // Test files use the built-in node:test runner and plain JS.
@@ -26,6 +31,8 @@ export default tseslint.config(
         console: 'readonly',
         Buffer: 'readonly',
         queueMicrotask: 'readonly',
+        setTimeout: 'readonly',
+        fetch: 'readonly',
       },
     },
   },
