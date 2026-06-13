@@ -66,36 +66,91 @@ This repository currently targets **Phase 1**: standing up the orchestrator foun
 > Later phases: **Phase 2** — the unified web console (split-pane terminals, live VNC, attention rings);
 > **Phase 3** — inter-agent hand-offs via `/command-invoke`.
 
+### Architecture (Phase 1)
+
+A single orchestrator process exposes an HTTP API, persists session state in
+PostgreSQL, and drives the host Docker daemon to provision sandbox containers in
+which CLI agents run. Agent stdout/stderr is multiplexed per agent and streamed
+into the database so sessions survive a restart.
+
+```mermaid
+graph TD
+    Client[HTTP client] -->|POST /sessions| Engine
+    subgraph Orchestrator process
+        Engine[OrchestratorEngine + Express API]
+        Spawner[Agent spawner / stream multiplexer]
+        Prov[Sandbox provisioner]
+        Engine --> Spawner
+        Engine --> Prov
+        Engine -->|session / sandbox / agent state| DB[(PostgreSQL)]
+    end
+    Prov -->|docker API| Sandbox[Sandbox container]
+    Spawner -->|docker exec + streams| Sandbox
+    Sandbox --> Agent[CLI agent: Aider / Claude Code / …]
+```
+
+On `SIGTERM` the engine marks sessions `paused` and exits; on startup it queries
+`paused` sessions and reconnects to any sandbox still running (otherwise marks it
+`orphaned`).
+
 ### Repository layout
 
 ```
-src/orchestrator/   # connection router + sandbox/agent manager (Phase 1 core)
-src/models/         # session + workspace domain models (PostgreSQL-backed)
-test/               # test suites
-deploy/             # Dockerfile and deployment configs
+src/sandbox/        # Docker sandbox provisioning engine (AETHERMUX-3)
+src/orchestrator/   # generic agent spawn contract + stream multiplexer (AETHERMUX-4)
+src/persistence/    # PostgreSQL session-state store + migrations (AETHERMUX-5)
+src/server/         # orchestrator engine + HTTP API (AETHERMUX-6)
+src/main.ts         # process entry point (npm start)
+test/               # unit + integration test suites
+deploy/             # Dockerfile
 DECISIONS.md        # architecture decision log (language, runtime, etc.)
+DEPLOYMENT.md       # deployment guide (Compose, env vars, cloud VMs)
 ```
 
-> **Status:** scaffolding only. This commit establishes structure, CI, and tooling.
-> The actual agent-spawn, sandbox, and database layers follow in child issues of the
-> Phase 1 epic (`AETHERMUX-1`).
-
 ---
+
+## Quick start
+
+Bring up PostgreSQL + the orchestrator with Docker Compose:
+
+```bash
+docker compose up --build
+
+curl localhost:8080/healthz                     # {"status":"ok"}
+
+curl -X POST localhost:8080/sessions \           # provision sandbox + spawn agent
+  -H 'content-type: application/json' \
+  -d '{"command":["sh","-c","echo hello; sleep 30"]}'
+# {"sessionID":"s-..."}
+
+curl localhost:8080/sessions/<sessionID>         # session graph + agent buffers
+curl -X DELETE localhost:8080/sessions/<sessionID>
+```
+
+See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for env vars, port config, and cloud VM setup.
 
 ## Tech stack
 
 - **Runtime / language:** Node.js 20+ with TypeScript (ESM). See [`DECISIONS.md`](./DECISIONS.md).
-- **CI:** GitHub Actions — lint, typecheck, build, and test on every push.
+- **Storage:** PostgreSQL (session state only — never files).
+- **Sandboxing:** Docker (via `dockerode`); HTTP API via Express.
+- **CI:** GitHub Actions — lint, typecheck, build, and test (with a Postgres service) on every push.
 
 ## Development
 
 ```bash
-npm ci          # install dependencies
-npm run lint    # eslint
+npm ci              # install dependencies
+npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm run build   # compile TypeScript to dist/
-npm test        # node --test
+npm run build       # compile TypeScript to dist/
+npm test            # node --test (unit tests always run; integration tests
+                    #   run when Docker and a test database are available)
+npm run test:coverage   # tests with coverage report
+npm start           # run the orchestrator (needs DATABASE_URL)
 ```
+
+Integration tests use a real Docker daemon and a PostgreSQL instance reachable via
+`AETHERMUX_TEST_DATABASE_URL`; when either is absent those tests skip cleanly.
 
 ## License
 
