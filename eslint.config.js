@@ -25,6 +25,7 @@ export default tseslint.config(
         process: 'readonly',
         console: 'readonly',
         Buffer: 'readonly',
+        queueMicrotask: 'readonly',
       },
     },
   },
