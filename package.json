@@ -17,8 +17,12 @@
     "test": "node --test",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "dockerode": "^4.0.2"
+  },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@types/dockerode": "^3.3.31",
     "@types/node": "^20.14.0",
     "eslint": "^9.9.0",
     "typescript": "^5.5.0",
