@@ -17,10 +17,16 @@ async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? 8080);
   const connectionString = process.env.DATABASE_URL ?? process.env.AETHERMUX_TEST_DATABASE_URL;
 
+  // Build sandbox config only from env vars that are set, so unset vars keep
+  // the provisioner's defaults rather than overriding them with undefined.
+  const sandboxConfig: { workspaceRoot?: string; image?: string } = {};
+  if (process.env.AETHERMUX_WORKSPACE_ROOT) sandboxConfig.workspaceRoot = process.env.AETHERMUX_WORKSPACE_ROOT;
+  if (process.env.AETHERMUX_SANDBOX_IMAGE) sandboxConfig.image = process.env.AETHERMUX_SANDBOX_IMAGE;
+
   const store = await SessionStore.connect({ connectionString });
   const engine = new OrchestratorEngine({
     store,
-    provisioner: new SandboxProvisioner(),
+    provisioner: new SandboxProvisioner(sandboxConfig),
     spawner: new Orchestrator(),
   });
 

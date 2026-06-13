@@ -25,5 +25,8 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
-# Placeholder entrypoint — replaced when the orchestrator process exists.
-CMD ["node", "dist/index.js"]
+# HTTP API port (override with the PORT env var).
+EXPOSE 8080
+
+# The orchestrator main loop: connect store → recover → serve HTTP API.
+CMD ["node", "dist/main.js"]
