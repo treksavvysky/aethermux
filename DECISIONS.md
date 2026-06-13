@@ -5,6 +5,41 @@ Each entry is an ADR (Architecture Decision Record).
 
 ---
 
+## ADR-0002 — CI job name and main branch-protection contexts are one contract
+
+- **Date:** 2026-06-13
+- **Status:** Accepted
+- **Issue:** AETHERMUX-8
+
+### Context
+
+`main` branch protection gates merges on a required status check whose name must
+**exactly** match a check GitHub Actions emits. For a single-job workflow, that
+context is the job's name. The job was originally named `lint · typecheck · build
+· test` — a brittle, non-ASCII display string (note the `·` middle dots). Branch
+protection was twice misconfigured to require contexts CI never emitted, which
+blocked every PR until corrected.
+
+### Decision
+
+- The CI workflow exposes **one stable, ASCII context: the job `ci`**
+  (`.github/workflows/ci.yml` → `jobs.ci`). It runs lint, typecheck, build, and
+  test as steps.
+- `main` branch protection requires exactly the `ci` context.
+- **The CI job name and `required_status_checks.contexts` are a single contract.**
+  Renaming or restructuring the CI job(s) without updating branch protection (or
+  vice-versa) leaves the gate waiting on a context that never reports, blocking
+  all PRs. Change them together, and source the context name from the check-runs
+  API rather than retyping it.
+
+### Merge-flow invariants (preserved)
+
+PR-to-`main` flow; **strict** status checks (branch must be up to date); **no
+required reviews** (a solo operator cannot self-approve on GitHub); `enforce_admins
+= false` retained as break-glass; force-pushes and branch deletion blocked.
+
+---
+
 ## ADR-0001 — Implementation language & runtime: Node.js + TypeScript
 
 - **Date:** 2026-06-13
