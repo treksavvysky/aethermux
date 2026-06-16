@@ -30,9 +30,9 @@ export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Ex
   const app = express();
   app.use(express.json());
 
-  // Liveness probe is always open; everything else uses the shared token (same
-  // mechanism as the WebSocket upgrade). With no token configured the API is
-  // open (local dev).
+  // Liveness probe is the sole unauthenticated endpoint (it returns no data).
+  // Every other route is fail-closed behind the shared token — the same
+  // mechanism as the WebSocket upgrade.
   app.get('/healthz', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
   });

@@ -3,9 +3,12 @@ import type { IncomingMessage } from 'node:http';
 
 /**
  * Shared API authentication for both the HTTP API and the WebSocket upgrade, so
- * the two use exactly one mechanism (AETHERMUX_API_TOKEN). When no token is
- * configured the API is open (local dev); when a token is set, every request —
- * HTTP or WS — must present it, so there is no open relay.
+ * the two use exactly one mechanism: the shared bearer token AETHERMUX_API_TOKEN.
+ *
+ * Validation is **fail-closed** (per the AetherMux API authentication Decision,
+ * 2026-06-16): a request is authorized only if a token is configured AND the
+ * request presents the matching token. No configured token, or a wrong/absent
+ * token, is rejected — there is no open-relay mode.
  */
 
 /**
@@ -30,11 +33,11 @@ export function extractRequestToken(req: IncomingMessage): string | undefined {
 }
 
 /**
- * True if the request is authorized. With no configured token the API is open;
- * otherwise the request must present the exact token (constant-time compared).
+ * True only if a token is configured and the request presents it (constant-time
+ * compared). Fail-closed: an unconfigured token, or a wrong/absent one, denies.
  */
 export function isAuthorized(req: IncomingMessage, token?: string): boolean {
-  if (!token) return true;
+  if (!token) return false;
   const provided = extractRequestToken(req);
   return provided !== undefined && constantTimeEqual(provided, token);
 }

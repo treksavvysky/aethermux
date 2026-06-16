@@ -13,30 +13,35 @@ Each entry is an ADR (Architecture Decision Record).
 
 ### Context
 
-AETHERMUX-12 requires the new WebSocket transport to "authenticate/reject
-connections using the same mechanism as the existing HTTP API (no open relay)".
-Phase 1's HTTP API had **no** app-level auth (it relied on the network
-perimeter), so "the same mechanism" was underspecified — matching it literally
-would leave the WebSocket an open relay.
+AETHERMUX-12 requires the WebSocket transport and the HTTP API to share one auth
+mechanism with **no open relay**. Phase 1's HTTP API had **no** app-level auth
+(it relied on the network perimeter). This records the project-level *AetherMux
+API authentication Decision (2026-06-16)*, which hardens the whole API.
 
 ### Decision
 
-Introduce a single shared API token, `AETHERMUX_API_TOKEN`, enforced by one
-helper (`isAuthorized`, `src/server/auth.ts`) used by **both** the HTTP API
-(Express middleware) and the WebSocket upgrade:
+A single shared bearer token, `AETHERMUX_API_TOKEN`, is the access boundary for
+**both** the HTTP API and the WebSocket transport, enforced by one helper
+(`isAuthorized`, `src/server/auth.ts`) used by the HTTP middleware and the WS
+upgrade. Validation is **fail-closed**:
 
-- **Unset** → the API is open (local-dev default; unchanged behaviour).
-- **Set** → every HTTP route except `/healthz` and every WS upgrade must present
-  the token, else `401`. No open relay.
+- **No token configured _or_ a wrong/absent token → reject (`401`).** There is no
+  open mode — an unconfigured token does not open the API, it closes it.
+- A request is authorized only when a token is configured **and** the request
+  presents the matching token.
+- The orchestrator process **refuses to start** without `AETHERMUX_API_TOKEN`
+  (rather than running a server that rejects everything).
+- `/healthz` is the sole unauthenticated endpoint (liveness only; returns no data).
 
 The token is accepted via `Authorization: Bearer <token>`, an `x-api-token`
-header, or a `?token=` query parameter. The query parameter exists because
-browsers cannot set headers on a WebSocket handshake; the token **value** and the
-checking code are identical across transports, so it is genuinely one mechanism.
-Comparison is constant-time. `/healthz` stays open for liveness probes.
+header, or a `?token=` query parameter — the query parameter because browsers
+cannot set headers on a WebSocket handshake; the token **value** and the checking
+code are identical across transports, so it is genuinely one mechanism.
+Comparison is constant-time.
 
-This is intentionally minimal (a single operator token, matching the "no team
-platform / no RBAC" boundary) — not user accounts or per-agent credentials.
+This is intentionally minimal — a single operator token (mirroring Fluxion Core's
+`FLUXION_API_KEY` pattern), matching the "no team platform / no RBAC" boundary —
+not user accounts or per-agent credentials.
 
 ---
 

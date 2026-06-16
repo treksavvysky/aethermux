@@ -36,6 +36,7 @@ async function dbReachable(connectionString) {
 
 const ready = (await dockerReachable()) && (await dbReachable(dbUrl));
 const skip = ready ? false : 'requires Docker + AETHERMUX_TEST_DATABASE_URL';
+const TOKEN = 'it-token'; // fail-closed auth: the API requires a shared token
 
 async function makeStack({ flushIntervalMs = 250 } = {}) {
   const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'aethermux-ws-it-'));
@@ -43,10 +44,10 @@ async function makeStack({ flushIntervalMs = 250 } = {}) {
   const provisioner = new SandboxProvisioner({ workspaceRoot });
   const engine = new OrchestratorEngine({ store, provisioner, spawner: new Orchestrator() }, { flushIntervalMs });
   engine.start();
-  const server = createServer(createApp(engine));
-  const socket = new OrchestratorSocket(engine, server);
+  const server = createServer(createApp(engine, { token: TOKEN }));
+  const socket = new OrchestratorSocket(engine, server, { token: TOKEN });
   await new Promise((r) => server.listen(0, r));
-  const wsUrl = `ws://127.0.0.1:${server.address().port}${WS_PATH}`;
+  const wsUrl = `ws://127.0.0.1:${server.address().port}${WS_PATH}?token=${TOKEN}`;
   return { workspaceRoot, store, provisioner, engine, server, socket, wsUrl };
 }
 

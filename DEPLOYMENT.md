@@ -27,7 +27,7 @@ via the mounted Docker socket.
 | --- | --- | --- | --- |
 | `PORT` | no | `8080` | HTTP API port the orchestrator listens on. |
 | `DATABASE_URL` | yes | — | PostgreSQL connection string (`postgres://user:pass@host:5432/db`). Migrations run automatically on startup. |
-| `AETHERMUX_API_TOKEN` | no | — | Shared token for the HTTP API **and** the WebSocket (`/ws`). Unset → API is open (local dev); set → all requests except `/healthz` must present it. **Set this in production.** See [`WEBSOCKET.md`](./WEBSOCKET.md). |
+| `AETHERMUX_API_TOKEN` | **yes** | — | Shared token for the HTTP API **and** the WebSocket (`/ws`), validated **fail-closed**. Every request except `/healthz` must present it; the orchestrator **refuses to start** without it. See [`WEBSOCKET.md`](./WEBSOCKET.md). |
 | `AETHERMUX_WORKSPACE_ROOT` | no | `os.tmpdir()/aethermux/workspaces` | Host directory under which per-session workspaces are created and bind-mounted into sandboxes. Must exist on the Docker **host**. |
 | `AETHERMUX_SANDBOX_IMAGE` | no | `alpine:3.20` | Base image for sandbox containers. |
 

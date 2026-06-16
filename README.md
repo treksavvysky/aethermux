@@ -116,23 +116,28 @@ WEBSOCKET.md        # real-time streaming protocol (/ws framing + auth)
 
 ## Quick start
 
-Bring up PostgreSQL + the orchestrator with Docker Compose:
+Bring up PostgreSQL + the orchestrator with Docker Compose (Compose sets a
+local-dev `AETHERMUX_API_TOKEN` of `local-dev-token`; the API is **fail-closed**,
+so every request except `/healthz` must present it):
 
 ```bash
 docker compose up --build
+TOKEN=local-dev-token
 
-curl localhost:8080/healthz                     # {"status":"ok"}
+curl localhost:8080/healthz                      # {"status":"ok"}  (open)
 
 curl -X POST localhost:8080/sessions \           # provision sandbox + spawn agent
+  -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"command":["sh","-c","echo hello; sleep 30"]}'
 # {"sessionID":"s-..."}
 
-curl localhost:8080/sessions/<sessionID>         # session graph + agent buffers
-curl -X DELETE localhost:8080/sessions/<sessionID>
+curl -H "authorization: Bearer $TOKEN" localhost:8080/sessions/<sessionID>
+curl -X DELETE -H "authorization: Bearer $TOKEN" localhost:8080/sessions/<sessionID>
 ```
 
-See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for env vars, port config, and cloud VM setup.
+See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for env vars, port config, and cloud VM
+setup, and [`WEBSOCKET.md`](./WEBSOCKET.md) for the real-time `/ws` transport.
 
 ## Tech stack
 

@@ -29,8 +29,9 @@ test('parseClientMessage accepts valid stdin and rejects everything else', () =>
 
 test('isAuthorized / extractRequestToken: header, x-api-token, and ?token=', () => {
   const reqWith = (headers, url = '/ws') => ({ headers, url });
-  // No token configured → always open.
-  assert.equal(isAuthorized(reqWith({}), undefined), true);
+  // Fail-closed: no token configured → reject, even if the request presents one.
+  assert.equal(isAuthorized(reqWith({}), undefined), false);
+  assert.equal(isAuthorized(reqWith({ authorization: 'Bearer secret' }), undefined), false);
   // Token configured → must match.
   assert.equal(isAuthorized(reqWith({ authorization: 'Bearer secret' }), 'secret'), true);
   assert.equal(isAuthorized(reqWith({ authorization: 'secret' }), 'secret'), true);
@@ -41,6 +42,8 @@ test('isAuthorized / extractRequestToken: header, x-api-token, and ?token=', () 
   assert.equal(extractRequestToken(reqWith({ authorization: 'Bearer abc' })), 'abc');
   assert.equal(extractRequestToken(reqWith({}, '/ws?token=q')), 'q');
 });
+
+const TOKEN = 'test-token';
 
 // --- WS server over a fake engine (no Docker/Postgres) -----------------------
 
@@ -96,9 +99,10 @@ function waitFor(ws, predicate, timeoutMs = 4000) {
   });
 }
 
-test('rejects WS connections without the token when one is configured', async (t) => {
+test('WS auth is fail-closed: rejects without a token, with a wrong token, and when none is configured', async (t) => {
+  // (1) token configured, none/wrong presented → reject; correct → accept.
   const engine = new FakeEngine();
-  const { server, socket } = await startServer(engine, { token: 'secret' });
+  const { server, socket } = await startServer(engine, { token: TOKEN });
   const url = `ws://127.0.0.1:${server.address().port}${WS_PATH}`;
   t.after(async () => {
     await socket.close();
@@ -106,23 +110,31 @@ test('rejects WS connections without the token when one is configured', async (t
   });
 
   await assert.rejects(() => connect(url), /unexpected 401|401/);
+  await assert.rejects(() => connect(`${url}?token=wrong`), /unexpected 401|401/);
   assert.equal(socket.clientCount, 0);
 
-  // With the right token (via query param, browser-friendly), it connects.
-  const ws = await connect(`${url}?token=secret`);
+  const ws = await connect(`${url}?token=${TOKEN}`); // query param (browser-friendly)
   t.after(() => ws.close());
   assert.equal(ws.readyState, WebSocket.OPEN);
+
+  // (2) no token configured → still rejected (fail-closed, no open relay).
+  const open = await startServer(new FakeEngine(), {});
+  t.after(async () => {
+    await open.socket.close();
+    open.server.close();
+  });
+  await assert.rejects(() => connect(open.url), /unexpected 401|401/);
 });
 
 test('pushes stdout/stderr/exit multiplexed by session+agent; relays stdin', async (t) => {
   const engine = new FakeEngine();
-  const { server, socket, url } = await startServer(engine, {}); // open (no token)
+  const { server, socket, url } = await startServer(engine, { token: TOKEN });
   t.after(async () => {
     await socket.close();
     server.close();
   });
 
-  const ws = await connect(url);
+  const ws = await connect(`${url}?token=${TOKEN}`);
   t.after(() => ws.close());
 
   // stdout push.
@@ -161,18 +173,18 @@ test('pushes stdout/stderr/exit multiplexed by session+agent; relays stdin', asy
 
 test('disconnect/reconnect: a new client still receives broadcasts', async (t) => {
   const engine = new FakeEngine();
-  const { server, socket, url } = await startServer(engine, {});
+  const { server, socket, url } = await startServer(engine, { token: TOKEN });
   t.after(async () => {
     await socket.close();
     server.close();
   });
 
-  const a = await connect(url);
+  const a = await connect(`${url}?token=${TOKEN}`);
   assert.equal(socket.clientCount, 1);
   a.close();
   await waitForCondition(() => socket.clientCount === 0);
 
-  const b = await connect(url);
+  const b = await connect(`${url}?token=${TOKEN}`);
   t.after(() => b.close());
   const p = waitFor(b, (m) => m.type === 'stdout');
   engine.emit('agentLog', { sessionId: 's', agentId: 'agent-01', stream: 'stdout', text: 'after-reconnect', timestamp: 't' });

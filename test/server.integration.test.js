@@ -36,12 +36,13 @@ async function makeEngine(extra = {}) {
   return { engine, store, provisioner, workspaceRoot };
 }
 
-const get = async (base, p) => (await fetch(`${base}${p}`)).json();
+const TOKEN = 'srv-it-token'; // fail-closed auth: the API requires a shared token
+const get = async (base, p) => (await fetch(`${base}${p}${p.includes('?') ? '&' : '?'}token=${TOKEN}`)).json();
 
 test('HTTP: create a session, persist the graph, and flush agent output to the DB', { skip }, async (t) => {
   const { engine, store, provisioner, workspaceRoot } = await makeEngine();
   engine.start();
-  const server = createApp(engine).listen(0);
+  const server = createApp(engine, { token: TOKEN }).listen(0);
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -59,7 +60,7 @@ test('HTTP: create a session, persist the graph, and flush agent output to the D
   // CreateSession accepts (repoPath, command, env) and returns a sessionID.
   const createRes = await fetch(`${base}/sessions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ repoPath: null, command: ['sh', '-c', 'echo STARTED; sleep 30'], env: { FOO: 'bar' } }),
   });
   assert.equal(createRes.status, 201);
