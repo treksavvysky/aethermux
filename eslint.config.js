@@ -32,6 +32,8 @@ export default tseslint.config(
         Buffer: 'readonly',
         queueMicrotask: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        URL: 'readonly',
         fetch: 'readonly',
       },
     },
