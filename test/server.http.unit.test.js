@@ -64,3 +64,18 @@ test('GET /sessions lists, GET/DELETE /sessions/:id handle found and missing', a
   assert.equal((await fetch(`${base}/sessions/known`, { method: 'DELETE' })).status, 200);
   assert.equal((await fetch(`${base}/sessions/missing`, { method: 'DELETE' })).status, 404);
 });
+
+test('HTTP API enforces the shared token when one is configured (healthz stays open)', async () => {
+  const server = createApp(makeFakeEngine(), { token: 'secret' }).listen(0);
+  await new Promise((r) => server.once('listening', r));
+  const b = `http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.equal((await fetch(`${b}/healthz`)).status, 200); // probe always open
+    assert.equal((await fetch(`${b}/sessions`)).status, 401); // no token → rejected
+    assert.equal((await fetch(`${b}/sessions`, { headers: { authorization: 'Bearer secret' } })).status, 200);
+    assert.equal((await fetch(`${b}/sessions?token=secret`)).status, 200); // query-param carrier
+    assert.equal((await fetch(`${b}/sessions`, { headers: { authorization: 'Bearer nope' } })).status, 401);
+  } finally {
+    server.close();
+  }
+});

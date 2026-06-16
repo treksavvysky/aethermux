@@ -1,7 +1,14 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 
+import { isAuthorized } from './auth.js';
 import type { OrchestratorEngine } from './engine.js';
 import { OPENAPI_SPEC } from './openapi.js';
+
+/** Options for {@link createApp}. */
+export interface AppOptions {
+  /** Shared API token; when set, every route except `/healthz` requires it. */
+  token?: string;
+}
 
 /** Wraps an async handler so rejections become a 500 instead of crashing. */
 function asyncHandler(fn: (req: Request, res: Response) => Promise<void>) {
@@ -19,12 +26,23 @@ function isStringArray(value: unknown): value is string[] {
  * The caller owns `listen()` / lifecycle so the same app is testable on an
  * ephemeral port.
  */
-export function createApp(engine: OrchestratorEngine): Express {
+export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Express {
   const app = express();
   app.use(express.json());
 
+  // Liveness probe is always open; everything else uses the shared token (same
+  // mechanism as the WebSocket upgrade). With no token configured the API is
+  // open (local dev).
   app.get('/healthz', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
+  });
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isAuthorized(req, opts.token)) {
+      next();
+      return;
+    }
+    res.status(401).json({ error: 'unauthorized' });
   });
 
   app.get('/openapi.json', (_req: Request, res: Response) => {

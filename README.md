@@ -93,18 +93,23 @@ On `SIGTERM` the engine marks sessions `paused` and exits; on startup it queries
 `paused` sessions and reconnects to any sandbox still running (otherwise marks it
 `orphaned`).
 
+A **WebSocket transport** on the same server (`/ws`) streams live per-agent
+stdout/stderr to browser clients and accepts stdin — the real-time path the
+Phase 2 console builds on. See [`WEBSOCKET.md`](./WEBSOCKET.md).
+
 ### Repository layout
 
 ```
 src/sandbox/        # Docker sandbox provisioning engine (AETHERMUX-3)
 src/orchestrator/   # generic agent spawn contract + stream multiplexer (AETHERMUX-4)
 src/persistence/    # PostgreSQL session-state store + migrations (AETHERMUX-5)
-src/server/         # orchestrator engine + HTTP API (AETHERMUX-6)
+src/server/         # orchestrator engine, HTTP API, and WebSocket transport (AETHERMUX-6, -12)
 src/main.ts         # process entry point (npm start)
 test/               # unit + integration test suites
 deploy/             # Dockerfile
 DECISIONS.md        # architecture decision log (language, runtime, etc.)
 DEPLOYMENT.md       # deployment guide (Compose, env vars, cloud VMs)
+WEBSOCKET.md        # real-time streaming protocol (/ws framing + auth)
 ```
 
 ---

@@ -5,6 +5,41 @@ Each entry is an ADR (Architecture Decision Record).
 
 ---
 
+## ADR-0004 — One shared-token auth mechanism for the HTTP API and WebSocket
+
+- **Date:** 2026-06-16
+- **Status:** Accepted
+- **Issue:** AETHERMUX-12
+
+### Context
+
+AETHERMUX-12 requires the new WebSocket transport to "authenticate/reject
+connections using the same mechanism as the existing HTTP API (no open relay)".
+Phase 1's HTTP API had **no** app-level auth (it relied on the network
+perimeter), so "the same mechanism" was underspecified — matching it literally
+would leave the WebSocket an open relay.
+
+### Decision
+
+Introduce a single shared API token, `AETHERMUX_API_TOKEN`, enforced by one
+helper (`isAuthorized`, `src/server/auth.ts`) used by **both** the HTTP API
+(Express middleware) and the WebSocket upgrade:
+
+- **Unset** → the API is open (local-dev default; unchanged behaviour).
+- **Set** → every HTTP route except `/healthz` and every WS upgrade must present
+  the token, else `401`. No open relay.
+
+The token is accepted via `Authorization: Bearer <token>`, an `x-api-token`
+header, or a `?token=` query parameter. The query parameter exists because
+browsers cannot set headers on a WebSocket handshake; the token **value** and the
+checking code are identical across transports, so it is genuinely one mechanism.
+Comparison is constant-time. `/healthz` stays open for liveness probes.
+
+This is intentionally minimal (a single operator token, matching the "no team
+platform / no RBAC" boundary) — not user accounts or per-agent credentials.
+
+---
+
 ## ADR-0003 — Per-agent log buffers are bounded with a truncation marker
 
 - **Date:** 2026-06-13

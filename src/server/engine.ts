@@ -1,8 +1,26 @@
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 
 import type { SandboxProvisioner } from '../sandbox/index.js';
 import type { AgentHandle, LogEntry, Orchestrator } from '../orchestrator/index.js';
 import type { Session, SessionGraph, SessionStore } from '../persistence/index.js';
+
+/** Emitted (event `agentLog`) for every captured line of agent output. */
+export interface AgentLogEvent {
+  sessionId: string;
+  agentId: string;
+  stream: 'stdout' | 'stderr';
+  text: string;
+  timestamp: string;
+}
+
+/** Emitted (event `agentExit`) when an agent process terminates. */
+export interface AgentExitEvent {
+  sessionId: string;
+  agentId: string;
+  status: 'exited' | 'error';
+  exitCode: number | null;
+}
 
 /** Collaborators the engine drives. Injected so they can be faked in tests. */
 export interface EngineDeps {
@@ -49,8 +67,13 @@ interface AgentRecord {
  * sessions whose sandboxes are still alive.
  *
  * Single-process by design (no Kubernetes); no transactions (last-write-wins).
+ *
+ * Extends EventEmitter and emits `agentLog` ({@link AgentLogEvent}) and
+ * `agentExit` ({@link AgentExitEvent}) as agents produce output / terminate, so
+ * a real-time transport (the WebSocket layer) can fan them out without changing
+ * the DB-persistence path.
  */
-export class OrchestratorEngine {
+export class OrchestratorEngine extends EventEmitter {
   private readonly store: SessionStore;
   private readonly provisioner: SandboxProvisioner;
   private readonly spawner: Orchestrator;
@@ -63,11 +86,25 @@ export class OrchestratorEngine {
   private flushing = false;
 
   constructor(deps: EngineDeps, config: EngineConfig = {}) {
+    super();
     this.store = deps.store;
     this.provisioner = deps.provisioner;
     this.spawner = deps.spawner;
     this.flushIntervalMs = config.flushIntervalMs ?? 1000;
     this.workspaceDir = config.workspaceDir ?? '/workspace';
+  }
+
+  /**
+   * Injects stdin into a live agent's process. Resolves once the data has been
+   * written (the underlying write applies back-pressure when the pipe is full).
+   * Throws if the agent is not a live, locally-tracked agent.
+   */
+  async sendStdin(sessionId: string, agentId: string, data: string): Promise<void> {
+    const rec = this.agents.get(this.agentDbId(sessionId, agentId));
+    if (!rec) {
+      throw new Error(`No live agent ${sessionId}:${agentId}`);
+    }
+    await rec.handle.write(data);
   }
 
   /** Starts the periodic DB flush loop (once per {@link flushIntervalMs}). */
@@ -276,11 +313,26 @@ export class OrchestratorEngine {
     this.agents.set(agentID, rec);
 
     handle.on('log', (entry: LogEntry) => {
+      // DB-persistence path (batched, flushed every flushIntervalMs).
       if (entry.stream === 'stdout') rec.pendingStdout += `${entry.text}\n`;
       else rec.pendingStderr += `${entry.text}\n`;
+      // Real-time fan-out path (additive; emitted synchronously as lines arrive).
+      const event: AgentLogEvent = {
+        sessionId: sessionID,
+        agentId: handle.id,
+        stream: entry.stream,
+        text: entry.text,
+        timestamp: entry.timestamp,
+      };
+      this.emit('agentLog', event);
     });
     handle.on('exit', (exit: { status: 'exited' | 'error'; exitCode: number | null }) => {
       rec.exited = exit;
+      const event: AgentExitEvent = { sessionId: sessionID, agentId: handle.id, status: exit.status, exitCode: exit.exitCode };
+      this.emit('agentExit', event);
     });
+    // Prevent an unhandled 'error' on the handle from crashing the process;
+    // terminal state is captured via the 'exit' handler above.
+    handle.on('error', () => undefined);
   }
 }
