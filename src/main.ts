@@ -16,7 +16,16 @@ import { OrchestratorEngine, OrchestratorSocket, createApp } from './server/inde
 async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? 8080);
   const connectionString = process.env.DATABASE_URL ?? process.env.AETHERMUX_TEST_DATABASE_URL;
+
+  // Fail-closed auth (AetherMux API authentication Decision, 2026-06-16): the
+  // shared token is required. Refuse to boot without it rather than run a server
+  // that rejects every request.
   const token = process.env.AETHERMUX_API_TOKEN;
+  if (!token) {
+    console.error('[aethermux] FATAL: AETHERMUX_API_TOKEN is required (fail-closed auth). Refusing to start.');
+    process.exit(1);
+    return;
+  }
 
   // Build sandbox config only from env vars that are set, so unset vars keep
   // the provisioner's defaults rather than overriding them with undefined.
@@ -41,7 +50,7 @@ async function main(): Promise<void> {
   const socket = new OrchestratorSocket(engine, server, { token });
   server.listen(port, () => {
     console.log(`[aethermux] orchestrator listening on :${port} (HTTP + WebSocket /ws)`);
-    console.log(`[aethermux] API auth: ${token ? 'token required' : 'OPEN (set AETHERMUX_API_TOKEN to secure)'}`);
+    console.log('[aethermux] API auth: shared token required (fail-closed)');
   });
 
   let shuttingDown = false;

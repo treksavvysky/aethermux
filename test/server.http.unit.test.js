@@ -18,13 +18,18 @@ function makeFakeEngine(overrides = {}) {
   };
 }
 
+const TOKEN = 'http-token'; // fail-closed auth: the API requires a shared token
+
 let server;
 let base;
 let engine;
 
+// Appends the shared token so requests pass the fail-closed auth middleware.
+const authed = (p) => `${base}${p}${p.includes('?') ? '&' : '?'}token=${TOKEN}`;
+
 before(async () => {
   engine = makeFakeEngine();
-  server = createApp(engine).listen(0);
+  server = createApp(engine, { token: TOKEN }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -32,11 +37,11 @@ before(async () => {
 after(() => { server?.close(); });
 
 const post = (body) =>
-  fetch(`${base}/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  fetch(authed('/sessions'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-test('GET /healthz and /openapi.json', async () => {
+test('GET /healthz (open) and /openapi.json (authed)', async () => {
   assert.deepEqual(await (await fetch(`${base}/healthz`)).json(), { status: 'ok' });
-  const spec = await (await fetch(`${base}/openapi.json`)).json();
+  const spec = await (await fetch(authed('/openapi.json'))).json();
   assert.equal(spec.openapi, '3.0.3');
   assert.ok(spec.paths['/sessions']);
 });
@@ -56,26 +61,36 @@ test('POST /sessions creates and returns a session id', async () => {
 });
 
 test('GET /sessions lists, GET/DELETE /sessions/:id handle found and missing', async () => {
-  assert.deepEqual(await (await fetch(`${base}/sessions`)).json(), { sessions: [{ sessionID: 's-1' }] });
+  assert.deepEqual(await (await fetch(authed('/sessions'))).json(), { sessions: [{ sessionID: 's-1' }] });
 
-  assert.equal((await fetch(`${base}/sessions/known`)).status, 200);
-  assert.equal((await fetch(`${base}/sessions/missing`)).status, 404);
+  assert.equal((await fetch(authed('/sessions/known'))).status, 200);
+  assert.equal((await fetch(authed('/sessions/missing'))).status, 404);
 
-  assert.equal((await fetch(`${base}/sessions/known`, { method: 'DELETE' })).status, 200);
-  assert.equal((await fetch(`${base}/sessions/missing`, { method: 'DELETE' })).status, 404);
+  assert.equal((await fetch(authed('/sessions/known'), { method: 'DELETE' })).status, 200);
+  assert.equal((await fetch(authed('/sessions/missing'), { method: 'DELETE' })).status, 404);
 });
 
-test('HTTP API enforces the shared token when one is configured (healthz stays open)', async () => {
-  const server = createApp(makeFakeEngine(), { token: 'secret' }).listen(0);
-  await new Promise((r) => server.once('listening', r));
-  const b = `http://127.0.0.1:${server.address().port}`;
+test('HTTP API auth is fail-closed (healthz stays open)', async () => {
+  // With a token configured: no/wrong token → 401; valid token (header or query) → 200.
+  const secured = createApp(makeFakeEngine(), { token: 'secret' }).listen(0);
+  await new Promise((r) => secured.once('listening', r));
+  const b = `http://127.0.0.1:${secured.address().port}`;
+  // With NO token configured: still fail-closed — every protected route is 401.
+  const unconfigured = createApp(makeFakeEngine(), {}).listen(0);
+  await new Promise((r) => unconfigured.once('listening', r));
+  const u = `http://127.0.0.1:${unconfigured.address().port}`;
   try {
     assert.equal((await fetch(`${b}/healthz`)).status, 200); // probe always open
     assert.equal((await fetch(`${b}/sessions`)).status, 401); // no token → rejected
     assert.equal((await fetch(`${b}/sessions`, { headers: { authorization: 'Bearer secret' } })).status, 200);
     assert.equal((await fetch(`${b}/sessions?token=secret`)).status, 200); // query-param carrier
     assert.equal((await fetch(`${b}/sessions`, { headers: { authorization: 'Bearer nope' } })).status, 401);
+
+    assert.equal((await fetch(`${u}/healthz`)).status, 200); // probe open
+    assert.equal((await fetch(`${u}/sessions`)).status, 401); // fail-closed: no token configured
+    assert.equal((await fetch(`${u}/sessions?token=secret`)).status, 401);
   } finally {
-    server.close();
+    secured.close();
+    unconfigured.close();
   }
 });

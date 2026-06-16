@@ -40,8 +40,9 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/aethermux
       AETHERMUX_WORKSPACE_ROOT: /srv/aethermux/workspaces
       AETHERMUX_SANDBOX_IMAGE: alpine:3.20
-      # Shared API + WebSocket token; empty by default (open) for local dev.
-      AETHERMUX_API_TOKEN: ${AETHERMUX_API_TOKEN:-}
+      # Shared API + WebSocket token (REQUIRED, fail-closed). A local-dev default
+      # is provided; override it via the environment for anything real.
+      AETHERMUX_API_TOKEN: ${AETHERMUX_API_TOKEN:-local-dev-token}
     ports:
       - "8080:8080"
     volumes:

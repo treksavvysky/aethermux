@@ -13,19 +13,22 @@ foundation for the Phase 2 web console.
 ## Authentication
 
 The WebSocket uses the **same mechanism as the HTTP API**: the shared
-`AETHERMUX_API_TOKEN`.
+`AETHERMUX_API_TOKEN`, validated **fail-closed** (per the AetherMux API
+authentication Decision, 2026-06-16).
 
-- If `AETHERMUX_API_TOKEN` is **unset**, the API is open (local dev).
-- If it is **set**, the upgrade is rejected with `401` unless the token is
-  presented. Browsers can't set headers on a WebSocket handshake, so the token
-  is supplied as a query parameter:
+- The token is **required**. The orchestrator refuses to start without it, and
+  any upgrade without the matching token is rejected with `401` — there is no
+  open mode (no open relay).
+- Browsers can't set headers on a WebSocket handshake, so the token is supplied
+  as a query parameter:
 
 ```
 ws://host:8080/ws?token=<AETHERMUX_API_TOKEN>
 ```
 
 Non-browser clients may instead send `Authorization: Bearer <token>` or an
-`x-api-token` header. The HTTP API accepts the same three carriers.
+`x-api-token` header. The HTTP API accepts the same three carriers. (`/healthz`
+is the one unauthenticated endpoint, for liveness probes.)
 
 ## Message framing
 
