@@ -46,3 +46,21 @@ test('tab close: removeSession drops the tab and re-points the active tab', () =
   expect(store.tabs).toHaveLength(0);
   expect(store.activeKey).toBeNull();
 });
+
+test('setAttention updates a tab attention state, notifies only on change', () => {
+  const store = new ConsoleStore();
+  store.setSessions([summary()]); // attentionState defaults to 'running' from the summary
+  expect(store.tabs[0].attentionState).toBe('running');
+  let notified = 0;
+  store.subscribe(() => (notified += 1));
+
+  store.setAttention('s1', 'agent-01', 'awaiting-input');
+  expect(store.tabs[0].attentionState).toBe('awaiting-input');
+  expect(notified).toBe(1);
+
+  store.setAttention('s1', 'agent-01', 'awaiting-input'); // no-op
+  expect(notified).toBe(1);
+
+  store.setAttention('s1', 'agent-01', 'error');
+  expect(store.tabs[0].attentionState).toBe('error');
+});

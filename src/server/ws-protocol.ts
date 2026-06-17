@@ -7,6 +7,8 @@
  * imports these types so client and server cannot drift.
  */
 
+import type { AttentionState } from './api-types.js';
+
 /** The path the WebSocket server is mounted on, on the shared HTTP server. */
 export const WS_PATH = '/ws';
 
@@ -42,8 +44,16 @@ export interface ErrorMessage {
   payload: string;
 }
 
+/** An agent attention-state transition (drives the console's attention rings). */
+export interface AgentStateMessage {
+  type: 'agentState';
+  sessionId: string;
+  agentId: string;
+  state: AttentionState;
+}
+
 /** Anything the server pushes to a client. Discriminated on `type`. */
-export type ServerMessage = StdoutMessage | StderrMessage | ExitMessage | ErrorMessage;
+export type ServerMessage = StdoutMessage | StderrMessage | ExitMessage | ErrorMessage | AgentStateMessage;
 
 /** Stdin a client injects, routed to the named agent's process. */
 export interface StdinMessage {

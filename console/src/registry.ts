@@ -32,9 +32,10 @@ export class TerminalRegistry {
     return this.sinks.has(termKey(sessionId, agentId));
   }
 
-  /** Writes a server frame to its terminal. Unknown targets are dropped. */
+  /** Writes a terminal-output frame to its terminal. Non-terminal frames
+   * (`agentState`, `error`) and unknown targets are dropped. */
   route(msg: ServerMessage): void {
-    if (msg.type === 'error') return;
+    if (msg.type !== 'stdout' && msg.type !== 'stderr' && msg.type !== 'exit') return;
     const sink = this.sinks.get(termKey(msg.sessionId, msg.agentId));
     if (!sink) return;
     if (msg.type === 'stdout') {

@@ -1,4 +1,4 @@
-import type { SessionSummary } from './protocol';
+import type { AttentionState, SessionSummary } from './protocol';
 
 /** One dashboard tab — a session's primary agent. */
 export interface Tab {
@@ -6,6 +6,8 @@ export interface Tab {
   agentId: string;
   label: string;
   status: string;
+  /** Drives the attention ring colour (blue/green/error/neutral). */
+  attentionState: AttentionState;
 }
 
 /** Stable identity for a tab (matches the terminal registry key). */
@@ -20,7 +22,13 @@ function labelFor(s: SessionSummary): string {
 }
 
 function tabFromSummary(s: SessionSummary): Tab {
-  return { sessionId: s.sessionId, agentId: s.agentId ?? 'agent', label: labelFor(s), status: s.status };
+  return {
+    sessionId: s.sessionId,
+    agentId: s.agentId ?? 'agent',
+    label: labelFor(s),
+    status: s.status,
+    attentionState: s.attentionState,
+  };
 }
 
 /**
@@ -73,6 +81,19 @@ export class ConsoleStore {
       this._activeKey = key;
       this.notify();
     }
+  }
+
+  /** Updates a tab's attention state (driven by `agentState` WS frames). */
+  setAttention(sessionId: string, agentId: string, state: AttentionState): void {
+    let changed = false;
+    this._tabs = this._tabs.map((t) => {
+      if (t.sessionId === sessionId && t.agentId === agentId && t.attentionState !== state) {
+        changed = true;
+        return { ...t, attentionState: state };
+      }
+      return t;
+    });
+    if (changed) this.notify();
   }
 
   subscribe(listener: () => void): () => void {

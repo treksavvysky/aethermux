@@ -10,6 +10,7 @@ import {
   type CreateSessionRequest,
   type SessionSummary,
 } from './api-types.js';
+import { AgentStateMachine } from './attention.js';
 
 export type { CreateSessionRequest };
 
@@ -30,6 +31,13 @@ export interface AgentExitEvent {
   exitCode: number | null;
 }
 
+/** Emitted (event `agentState`) on every attention state-machine transition. */
+export interface AgentStateEvent {
+  sessionId: string;
+  agentId: string;
+  state: AttentionState;
+}
+
 /** Collaborators the engine drives. Injected so they can be faked in tests. */
 export interface EngineDeps {
   store: SessionStore;
@@ -45,6 +53,8 @@ export interface EngineConfig {
   workspaceDir?: string;
   /** Grace period for SIGTERM before SIGKILL when terminating. Default 10 s. */
   terminateTimeoutSeconds?: number;
+  /** Stdout prompt patterns that signal `awaiting-input`. Defaults to the built-in list. */
+  promptPatterns?: readonly RegExp[];
 }
 
 /** Outcome of a {@link OrchestratorEngine.recover} pass. */
@@ -60,6 +70,7 @@ interface AgentRecord {
   pendingStderr: string;
   exited: { status: 'exited' | 'error'; exitCode: number | null } | null;
   statusPersisted: boolean;
+  state: AgentStateMachine;
 }
 
 /**
@@ -83,6 +94,7 @@ export class OrchestratorEngine extends EventEmitter {
   private readonly flushIntervalMs: number;
   private readonly workspaceDir: string;
   private readonly terminateTimeoutSeconds: number;
+  private readonly promptPatterns: readonly RegExp[] | undefined;
 
   private readonly agents = new Map<string, AgentRecord>();
   private readonly sessions = new Set<string>();
@@ -97,6 +109,7 @@ export class OrchestratorEngine extends EventEmitter {
     this.flushIntervalMs = config.flushIntervalMs ?? 1000;
     this.workspaceDir = config.workspaceDir ?? '/workspace';
     this.terminateTimeoutSeconds = config.terminateTimeoutSeconds ?? 10;
+    this.promptPatterns = config.promptPatterns;
   }
 
   /**
@@ -110,6 +123,8 @@ export class OrchestratorEngine extends EventEmitter {
       throw new Error(`No live agent ${sessionId}:${agentId}`);
     }
     await rec.handle.write(data);
+    // The operator answered — resume from awaiting-input.
+    if (rec.state.onStdin()) this.emitAgentState(sessionId, agentId, rec.state.state);
   }
 
   /** Starts the periodic DB flush loop (once per {@link flushIntervalMs}). */
@@ -250,17 +265,15 @@ export class OrchestratorEngine extends EventEmitter {
     return this.store.destroySession(sessionID);
   }
 
-  /** Builds a console summary, preferring live attention over the DB snapshot. */
+  /** Builds a console summary, preferring the live state machine over the DB snapshot. */
   private toSummary(session: Session, agent: AgentProcess | undefined): SessionSummary {
     const live = this.liveRecord(session.sessionID);
-    let attentionState: AttentionState;
-    if (live?.exited) {
-      attentionState = deriveAttentionState(live.exited.status, live.exited.exitCode);
-    } else if (live) {
-      attentionState = 'running';
-    } else {
-      attentionState = deriveAttentionState(agent?.status, agent?.processExitCode ?? null);
-    }
+    // For a live agent the attention state machine is authoritative (it carries
+    // awaiting-input / exited / error from real signals); for a recovered
+    // session with no live record, fall back to the persisted lifecycle.
+    const attentionState: AttentionState = live
+      ? live.state.state
+      : deriveAttentionState(agent?.status, agent?.processExitCode ?? null);
     const agentId = agent
       ? agent.agentID.slice(session.sessionID.length + 1)
       : live
@@ -400,8 +413,11 @@ export class OrchestratorEngine extends EventEmitter {
       pendingStderr: '',
       exited: null,
       statusPersisted: false,
+      state: new AgentStateMachine(this.promptPatterns),
     };
     this.agents.set(agentID, rec);
+    // Broadcast the initial `running` state so freshly-connected clients sync.
+    this.emitAgentState(sessionID, handle.id, rec.state.state);
 
     handle.on('log', (entry: LogEntry) => {
       // DB-persistence path (batched, flushed every flushIntervalMs).
@@ -416,14 +432,29 @@ export class OrchestratorEngine extends EventEmitter {
         timestamp: entry.timestamp,
       };
       this.emit('agentLog', event);
+      // Attention state machine: a real stdout prompt → awaiting-input.
+      if (rec.state.onOutput(entry.stream, entry.text)) {
+        this.emitAgentState(sessionID, handle.id, rec.state.state);
+      }
     });
     handle.on('exit', (exit: { status: 'exited' | 'error'; exitCode: number | null }) => {
       rec.exited = exit;
       const event: AgentExitEvent = { sessionId: sessionID, agentId: handle.id, status: exit.status, exitCode: exit.exitCode };
       this.emit('agentExit', event);
+      // Authoritative terminal state — green only on a real exit code 0.
+      if (rec.state.onExit(exit.status, exit.exitCode)) {
+        this.emitAgentState(sessionID, handle.id, rec.state.state);
+      }
     });
     // Prevent an unhandled 'error' on the handle from crashing the process;
     // terminal state is captured via the 'exit' handler above.
     handle.on('error', () => undefined);
+  }
+
+  /** Logs and broadcasts an attention state-machine transition. */
+  private emitAgentState(sessionId: string, agentId: string, state: AttentionState): void {
+    console.log(`[aethermux] agentState ${sessionId}:${agentId} → ${state}`);
+    const event: AgentStateEvent = { sessionId, agentId, state };
+    this.emit('agentState', event);
   }
 }

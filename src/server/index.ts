@@ -11,7 +11,9 @@ export {
   type RecoveryResult,
   type AgentLogEvent,
   type AgentExitEvent,
+  type AgentStateEvent,
 } from './engine.js';
+export { AgentStateMachine, DEFAULT_PROMPT_PATTERNS } from './attention.js';
 export { createApp, type AppOptions } from './http.js';
 export { OPENAPI_SPEC } from './openapi.js';
 export {
@@ -34,5 +36,6 @@ export {
   type StderrMessage,
   type ExitMessage,
   type ErrorMessage,
+  type AgentStateMessage,
   type StdinMessage,
 } from './ws-protocol.js';

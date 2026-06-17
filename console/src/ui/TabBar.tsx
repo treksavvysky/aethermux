@@ -18,10 +18,12 @@ export function TabBar({ tabs, activeKey, onSelect, onClose, onNew }: TabBarProp
         return (
           <div
             key={key}
-            class={`tab${key === activeKey ? ' active' : ''}`}
+            class={`tab ring-${tab.attentionState}${key === activeKey ? ' active' : ''}`}
             role="tab"
             aria-selected={key === activeKey}
             data-testid={`tab-${key}`}
+            data-attention={tab.attentionState}
+            title={`attention: ${tab.attentionState}`}
             onClick={() => onSelect(key)}
           >
             <span class="tab-label">{tab.label}</span>
