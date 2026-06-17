@@ -1,0 +1,30 @@
+{
+  "name": "aethermux-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AetherMux Phase 2 browser console — tabbed dashboard with live xterm.js terminals.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "preact": "^10.23.2"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.1",
+    "@testing-library/preact": "^3.2.4",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.2"
+  },
+  "overrides": {
+    "esbuild": "^0.25.0"
+  }
+}
