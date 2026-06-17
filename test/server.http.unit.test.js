@@ -98,6 +98,17 @@ test('DELETE /sessions/:id terminates (200) or 404; uses graceful terminateSessi
   assert.equal((await fetch(authed('/sessions/missing'))).status, 404);
 });
 
+test('CORS: preflight is answered without auth; responses carry CORS headers', async () => {
+  // A preflight OPTIONS carries no token and must still be answered (204).
+  const pre = await fetch(`${base}/sessions`, { method: 'OPTIONS' });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), '*');
+  assert.match(pre.headers.get('access-control-allow-headers') ?? '', /authorization/);
+  assert.match(pre.headers.get('access-control-allow-methods') ?? '', /POST/);
+  // Normal responses also carry the allow-origin header.
+  assert.equal((await fetch(`${base}/healthz`)).headers.get('access-control-allow-origin'), '*');
+});
+
 test('uncaught handler errors return a typed { error } 500, not HTML', async () => {
   const boom = createApp(
     makeFakeEngine({ listSessionSummaries: async () => { throw new Error('kaboom'); } }),

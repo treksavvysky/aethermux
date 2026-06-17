@@ -1,5 +1,6 @@
-node_modules
-dist
+# Applies to image builds (orchestrator + console) whose context is the repo root.
+**/node_modules
+**/dist
 coverage
 .git
 .github
@@ -7,4 +8,3 @@ coverage
 .env
 .env.*
 !.env.example
-test
