@@ -1,10 +1,14 @@
-# AetherMux — local development stack.
+# AetherMux — full local dev stack: PostgreSQL + orchestrator + Phase 2 console.
 #
 #   docker compose up --build
 #
-# Brings up PostgreSQL and the orchestrator. The orchestrator mounts the host
-# Docker socket so it can provision *sibling* sandbox containers on the host
-# daemon (Phase 1 is a single-process, socket-driven orchestrator — not DinD).
+# Then open the console (it reaches the orchestrator cross-origin; pass the API
+# base + token as query params):
+#   http://localhost:5173/?api=http://localhost:8080&token=local-dev-token
+#
+# The orchestrator mounts the host Docker socket so it can provision *sibling*
+# sandbox containers on the host daemon (Phase 1 is a single-process,
+# socket-driven orchestrator — not DinD).
 #
 # Because sandboxes are created on the host daemon, their bind-mounted workspace
 # directory must be a path that exists on the HOST. AETHERMUX_WORKSPACE_ROOT is
@@ -51,6 +55,19 @@ services:
       # Shared workspace root — same path on host and in the container so host
       # bind mounts for sandboxes resolve correctly.
       - /srv/aethermux/workspaces:/srv/aethermux/workspaces
+
+  # Phase 2 browser console — static SPA served by nginx. It talks to the
+  # orchestrator from the browser (cross-origin; CORS is enabled on the API),
+  # configured at runtime via ?api= and ?token= URL params (see the comment at
+  # the top of this file), so the image needs no build-time configuration.
+  console:
+    build:
+      context: .
+      dockerfile: console/Dockerfile
+    depends_on:
+      - orchestrator
+    ports:
+      - "5173:80"
 
 volumes:
   pgdata:

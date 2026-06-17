@@ -74,3 +74,10 @@ jobs:
       - name: Console build
         run: npm run build
         working-directory: console
+
+      # --- Full-stack integration artifacts (AETHERMUX-16) ---
+      - name: Validate docker-compose
+        run: docker compose config -q
+
+      - name: Build full-stack images (orchestrator + console)
+        run: docker compose build

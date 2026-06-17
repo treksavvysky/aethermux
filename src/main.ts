@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   );
   engine.start();
 
-  const server = createServer(createApp(engine, { token }));
+  const server = createServer(createApp(engine, { token, corsOrigin: process.env.AETHERMUX_CORS_ORIGIN }));
   const socket = new OrchestratorSocket(engine, server, { token });
   server.listen(port, () => {
     console.log(`[aethermux] orchestrator listening on :${port} (HTTP + WebSocket /ws)`);

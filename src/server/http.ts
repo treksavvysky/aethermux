@@ -8,6 +8,12 @@ import { OPENAPI_SPEC } from './openapi.js';
 export interface AppOptions {
   /** Shared API token; when set, every route except `/healthz` requires it. */
   token?: string;
+  /**
+   * Value for `Access-Control-Allow-Origin` so the browser console (served from
+   * its own origin) can call the API cross-origin. Default `*` (the token is the
+   * access control, not the origin). Set to a specific origin to lock it down.
+   */
+  corsOrigin?: string;
 }
 
 /** Wraps an async handler so rejections become a 500 instead of crashing. */
@@ -28,6 +34,24 @@ function isStringArray(value: unknown): value is string[] {
  */
 export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Express {
   const app = express();
+
+  // CORS so the browser console (a separate origin) can reach the API. The
+  // shared token — not the origin — is the access control, so `*` is the
+  // default. A preflight OPTIONS carries no auth and is answered before the
+  // token middleware.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', opts.corsOrigin ?? '*');
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'authorization,content-type,x-api-token');
+    res.setHeader('Access-Control-Max-Age', '600');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   app.use(express.json());
 
   // Liveness probe is the sole unauthenticated endpoint (it returns no data).

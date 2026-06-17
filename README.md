@@ -1,5 +1,7 @@
 # AetherMux
 
+[![CI](https://github.com/treksavvysky/aethermux/actions/workflows/ci.yml/badge.svg)](https://github.com/treksavvysky/aethermux/actions/workflows/ci.yml)
+
 > A cross-platform **web workstation for multi-agent orchestration**.
 
 AetherMux is a web-first, containerized orchestrator that multiplexes terminal
@@ -114,7 +116,12 @@ WEBSOCKET.md        # real-time streaming protocol (/ws framing + auth)
 ```
 
 The **Phase 2 web console** (a browser-only tabbed dashboard of live xterm.js
-terminals over `/ws`) lives in [`console/`](./console/) with its own README.
+terminals over `/ws`, with attention rings) lives in [`console/`](./console/).
+Run the **full stack** (postgres + orchestrator + console) with
+`docker compose up --build`, then open
+`http://localhost:5173/?api=http://localhost:8080&token=local-dev-token`. See
+[`docs/phase2-console.md`](./docs/phase2-console.md) for the full-stack guide,
+running CI checks locally, and the WebSocket envelope reference.
 
 ---
 
