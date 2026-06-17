@@ -39,8 +39,8 @@ export function TerminalPane({ tab, visible, registry, socket, factory }: Termin
       term.dispose();
       handle.current = null;
     };
-    // Mount once per tab; deps intentionally empty.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount once per tab; the tab identity is stable for the component's life,
+    // so the empty dependency list is intentional.
   }, []);
 
   useEffect(() => {

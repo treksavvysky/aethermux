@@ -4,7 +4,9 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    // console/ is a separate package with its own TypeScript toolchain (tsc +
+    // vitest + vite); it is not linted by the orchestrator's ESLint.
+    ignores: ['dist/**', 'node_modules/**', 'console/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
