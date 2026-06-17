@@ -106,11 +106,15 @@ src/persistence/    # PostgreSQL session-state store + migrations (AETHERMUX-5)
 src/server/         # orchestrator engine, HTTP API, and WebSocket transport (AETHERMUX-6, -12)
 src/main.ts         # process entry point (npm start)
 test/               # unit + integration test suites
+console/            # Phase 2 browser console — Preact + Vite + xterm.js SPA
 deploy/             # Dockerfile
 DECISIONS.md        # architecture decision log (language, runtime, etc.)
 DEPLOYMENT.md       # deployment guide (Compose, env vars, cloud VMs)
 WEBSOCKET.md        # real-time streaming protocol (/ws framing + auth)
 ```
+
+The **Phase 2 web console** (a browser-only tabbed dashboard of live xterm.js
+terminals over `/ws`) lives in [`console/`](./console/) with its own README.
 
 ---
 

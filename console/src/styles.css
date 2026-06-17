@@ -1,0 +1,166 @@
+:root {
+  --bg: #0b0e14;
+  --panel: #11151f;
+  --border: #1e2533;
+  --fg: #c8d0e0;
+  --muted: #6b7589;
+  --accent: #3b82f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.console {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: #0e1320;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tab.active {
+  border-color: var(--accent);
+}
+
+.tab-close,
+.tab-new {
+  background: transparent;
+  color: inherit;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab-new {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+.terminals {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.term-pane {
+  position: absolute;
+  inset: 0;
+  padding: 4px;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--muted);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10;
+}
+
+.create-form {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  width: min(520px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.create-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.create-form input,
+.create-form textarea {
+  background: #0e1320;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: 7px 9px;
+  font: inherit;
+}
+
+.create-form .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.create-form button {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.create-form button[type='button'] {
+  background: transparent;
+  color: var(--fg);
+}
+
+.error {
+  color: #f87171;
+  margin: 0;
+  font-size: 13px;
+}

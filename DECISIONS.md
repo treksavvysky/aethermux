@@ -5,6 +5,37 @@ Each entry is an ADR (Architecture Decision Record).
 
 ---
 
+## ADR-0005 — Phase 2 console framework: Preact
+
+- **Date:** 2026-06-17
+- **Status:** Accepted
+- **Decision owner:** George Loudon
+- **Issue:** AETHERMUX-14
+
+### Context
+
+The Phase 2 browser console (`console/`) needs a UI framework. The contract calls
+for "React or a similarly minimal framework" and to "keep the bundle lean, avoid
+large UI framework overhead."
+
+### Decision
+
+**Preact** (with Vite, Vitest, and xterm.js). Rationale: high-frequency agent
+terminal output is written directly into xterm.js and bypasses the framework's
+render cycle, so the framework only manages the low-churn tab bar and create
+form. Preact gives a React-compatible component API at ~4 KB runtime — near
+vanilla bundle size with real components — versus React (~45 KB, against the
+"lean" steer) or vanilla TS (leanest bytes but more hand-written DOM).
+
+The console's reusable logic (WebSocket reconnect/back-off, message routing to
+the correct terminal, tab/session state) lives in **framework-agnostic,
+unit-tested TS modules**, so the framework only touches a thin view layer and the
+tests don't depend on it. The shared WS/API envelope is imported directly from
+the orchestrator's `src/server/ws-protocol.ts` and `api-types.ts` (no
+duplication).
+
+---
+
 ## ADR-0004 — One shared-token auth mechanism for the HTTP API and WebSocket
 
 - **Date:** 2026-06-16
