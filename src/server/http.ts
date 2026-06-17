@@ -70,20 +70,26 @@ export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Ex
         res.status(400).json({ error: 'env must be an object' });
         return;
       }
-      const result = await engine.createSession({
+      const { sessionID } = await engine.createSession({
         repoPath: (repoPath as string | null | undefined) ?? null,
         command,
         env: env as Record<string, string> | undefined,
       });
-      res.status(201).json(result);
+      const summary = await engine.getSessionSummary(sessionID);
+      if (!summary) {
+        res.status(500).json({ error: 'session vanished immediately after creation' });
+        return;
+      }
+      res.status(201).json(summary); // CreateSessionResponse
     }),
   );
 
+  // Array of SessionSummary, each with a real-lifecycle attentionState so the
+  // console can initialise ring colour before the WebSocket stream arrives.
   app.get(
     '/sessions',
     asyncHandler(async (_req, res) => {
-      const sessions = await engine.listActiveSessions();
-      res.json({ sessions });
+      res.json(await engine.listSessionSummaries());
     }),
   );
 
@@ -99,17 +105,24 @@ export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Ex
     }),
   );
 
+  // Graceful termination: SIGTERM → SIGKILL after timeout, then remove.
   app.delete(
     '/sessions/:id',
     asyncHandler(async (req, res) => {
-      const destroyed = await engine.destroySession(req.params.id);
-      if (!destroyed) {
+      const terminated = await engine.terminateSession(req.params.id);
+      if (!terminated) {
         res.status(404).json({ error: 'session not found' });
         return;
       }
-      res.json({ destroyed: true });
+      res.json({ terminated: true, sessionId: req.params.id }); // TerminateResponse
     }),
   );
+
+  // Uniform typed error shape for anything uncaught (instead of Express's HTML).
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    const message = err instanceof Error ? err.message : 'internal error';
+    res.status(500).json({ error: message });
+  });
 
   return app;
 }

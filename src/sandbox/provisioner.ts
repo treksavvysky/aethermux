@@ -124,6 +124,22 @@ export class SandboxProvisioner {
     }
   }
 
+  /**
+   * Gracefully stops a sandbox container: Docker sends SIGTERM to its main
+   * process, then SIGKILL after `timeoutSeconds` (default 10). Idempotent — a
+   * missing (404) or already-stopped (304) container is a no-op.
+   */
+  async stop(containerID: string, opts: { timeoutSeconds?: number } = {}): Promise<void> {
+    try {
+      await this.docker.getContainer(containerID).stop({ t: opts.timeoutSeconds ?? 10 });
+    } catch (err) {
+      if (isNotFound(err) || isNotModified(err)) {
+        return;
+      }
+      throw new SandboxError(`Failed to stop sandbox ${containerID}`, err);
+    }
+  }
+
   /** Returns true if the container exists and is currently running. */
   async isRunning(containerID: string): Promise<boolean> {
     try {
@@ -193,4 +209,9 @@ export class SandboxProvisioner {
 /** True if a Docker error represents a 404 (no such container/image). */
 function isNotFound(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 404;
+}
+
+/** True if a Docker error represents a 304 (container already stopped). */
+function isNotModified(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 304;
 }

@@ -7,13 +7,24 @@ import { createApp } from '../dist/index.js';
  * Exercises the HTTP layer over a fake engine — no Docker/Postgres needed — so
  * the request validation and 404/error branches are always covered.
  */
+const SUMMARY = {
+  sessionId: 's-fake',
+  agentId: 'agent-01',
+  status: 'active',
+  attentionState: 'running',
+  createdAt: '2026-06-17T00:00:00.000Z',
+  repoPath: null,
+};
+
 function makeFakeEngine(overrides = {}) {
   return {
     created: [],
+    terminated: [],
     createSession: async function (req) { this.created.push(req); return { sessionID: 's-fake' }; },
+    getSessionSummary: async (id) => (id === 's-fake' ? SUMMARY : null),
+    listSessionSummaries: async () => [SUMMARY],
     getSession: async (id) => (id === 'known' ? { session: { sessionID: 'known' }, sandboxes: [], agents: [] } : null),
-    listActiveSessions: async () => [{ sessionID: 's-1' }],
-    destroySession: async (id) => id === 'known',
+    terminateSession: async function (id) { this.terminated.push(id); return id === 'known'; },
     ...overrides,
   };
 }
@@ -53,21 +64,55 @@ test('POST /sessions validates the body', async () => {
   assert.equal((await post({ command: ['x'], env: 'nope' })).status, 400); // bad env
 });
 
-test('POST /sessions creates and returns a session id', async () => {
+test('POST /sessions returns a SessionSummary { sessionId, agentId, status, createdAt, ... }', async () => {
   const res = await post({ command: ['echo', 'hi'], repoPath: null, env: { A: '1' } });
   assert.equal(res.status, 201);
-  assert.deepEqual(await res.json(), { sessionID: 's-fake' });
+  const body = await res.json();
+  assert.equal(body.sessionId, 's-fake');
+  assert.equal(body.agentId, 'agent-01');
+  assert.equal(body.status, 'active');
+  assert.equal(body.attentionState, 'running');
+  assert.match(body.createdAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(engine.created.at(-1).command, ['echo', 'hi']);
 });
 
-test('GET /sessions lists, GET/DELETE /sessions/:id handle found and missing', async () => {
-  assert.deepEqual(await (await fetch(authed('/sessions'))).json(), { sessions: [{ sessionID: 's-1' }] });
+test('GET /sessions returns a bare array of summaries with attentionState', async () => {
+  const body = await (await fetch(authed('/sessions'))).json();
+  assert.ok(Array.isArray(body), 'GET /sessions is a bare array');
+  assert.equal(body[0].sessionId, 's-fake');
+  assert.ok(['running', 'awaiting-input', 'exited', 'error'].includes(body[0].attentionState));
+});
 
+test('DELETE /sessions/:id terminates (200) or 404; uses graceful terminateSession', async () => {
+  const ok = await fetch(authed('/sessions/known'), { method: 'DELETE' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { terminated: true, sessionId: 'known' });
+  assert.ok(engine.terminated.includes('known'));
+
+  const missing = await fetch(authed('/sessions/missing'), { method: 'DELETE' });
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: 'session not found' });
+
+  // GET /sessions/:id still 200/404 (graph endpoint retained).
   assert.equal((await fetch(authed('/sessions/known'))).status, 200);
   assert.equal((await fetch(authed('/sessions/missing'))).status, 404);
+});
 
-  assert.equal((await fetch(authed('/sessions/known'), { method: 'DELETE' })).status, 200);
-  assert.equal((await fetch(authed('/sessions/missing'), { method: 'DELETE' })).status, 404);
+test('uncaught handler errors return a typed { error } 500, not HTML', async () => {
+  const boom = createApp(
+    makeFakeEngine({ listSessionSummaries: async () => { throw new Error('kaboom'); } }),
+    { token: TOKEN },
+  ).listen(0);
+  await new Promise((r) => boom.once('listening', r));
+  const b = `http://127.0.0.1:${boom.address().port}`;
+  try {
+    const res = await fetch(`${b}/sessions?token=${TOKEN}`);
+    assert.equal(res.status, 500);
+    assert.equal(res.headers.get('content-type')?.includes('application/json'), true);
+    assert.deepEqual(await res.json(), { error: 'kaboom' });
+  } finally {
+    boom.close();
+  }
 });
 
 test('HTTP API auth is fail-closed (healthz stays open)', async () => {

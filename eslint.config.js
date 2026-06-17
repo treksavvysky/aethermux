@@ -18,6 +18,9 @@ export default tseslint.config(
     // on Node globals (process, console, setInterval, …) in source files.
     rules: {
       'no-undef': 'off',
+      // Allow intentionally-unused args prefixed with _ (e.g. Express error
+      // handlers, which must declare 4 params to be recognised).
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   {
