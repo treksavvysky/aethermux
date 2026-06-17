@@ -72,6 +72,11 @@ test('renders tabs, routes WS output to the right terminal, sends stdin, creates
   expect(getByTestId('tab-s1/agent-01')).toBeTruthy();
   await waitFor(() => expect(created.length).toBe(1));
 
+  // attention ring updates live from the store (fed by agentState WS frames).
+  store.setAttention('s1', 'agent-01', 'awaiting-input');
+  await waitFor(() => expect(getByTestId('tab-s1/agent-01').getAttribute('data-attention')).toBe('awaiting-input'));
+  expect(getByTestId('tab-s1/agent-01').className).toContain('ring-awaiting-input');
+
   // criterion 2/6: a multiplexed WS frame routes to the correct xterm instance.
   registry.route({ type: 'stdout', sessionId: 's1', agentId: 'agent-01', payload: 'HELLO-WS' });
   expect(created[0].written.join('')).toContain('HELLO-WS');

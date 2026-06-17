@@ -18,7 +18,10 @@ const store = new ConsoleStore();
 
 const socket = new ReconnectingSocket({
   url: cfg.wsUrl,
-  onMessage: (msg) => registry.route(msg),
+  onMessage: (msg) => {
+    registry.route(msg); // terminal output (stdout/stderr/exit)
+    if (msg.type === 'agentState') store.setAttention(msg.sessionId, msg.agentId, msg.state); // attention ring
+  },
   onOpen: ({ reconnect }) => {
     // After a drop, replay each terminal's persisted history from the DB buffer.
     if (reconnect) void rehydrate(api, registry, store.tabs);

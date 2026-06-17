@@ -4,7 +4,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 
 import { isAuthorized } from './auth.js';
-import type { AgentExitEvent, AgentLogEvent, OrchestratorEngine } from './engine.js';
+import type { AgentExitEvent, AgentLogEvent, AgentStateEvent, OrchestratorEngine } from './engine.js';
 import { WS_PATH, parseClientMessage, type ServerMessage } from './ws-protocol.js';
 
 /** Options for {@link OrchestratorSocket}. */
@@ -32,6 +32,7 @@ export class OrchestratorSocket {
   private readonly path: string;
   private readonly onLog: (event: AgentLogEvent) => void;
   private readonly onExit: (event: AgentExitEvent) => void;
+  private readonly onState: (event: AgentStateEvent) => void;
   private readonly onUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
   constructor(
@@ -70,8 +71,11 @@ export class OrchestratorSocket {
         agentId: event.agentId,
         payload: { status: event.status, exitCode: event.exitCode },
       });
+    this.onState = (event) =>
+      this.broadcast({ type: 'agentState', sessionId: event.sessionId, agentId: event.agentId, state: event.state });
     engine.on('agentLog', this.onLog);
     engine.on('agentExit', this.onExit);
+    engine.on('agentState', this.onState);
   }
 
   /** Number of currently connected clients. */
@@ -122,6 +126,7 @@ export class OrchestratorSocket {
   async close(): Promise<void> {
     this.engine.off('agentLog', this.onLog);
     this.engine.off('agentExit', this.onExit);
+    this.engine.off('agentState', this.onState);
     this.server.off('upgrade', this.onUpgrade);
     for (const ws of this.clients) ws.close();
     this.clients.clear();

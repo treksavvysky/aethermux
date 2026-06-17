@@ -24,7 +24,7 @@ test('rehydrate replays each tab buffer from GET /sessions/:id', async () => {
     }),
   } as unknown as ApiClient;
 
-  const tabs: Tab[] = [{ sessionId: 's1', agentId: 'agent-01', label: 's1', status: 'active' }];
+  const tabs: Tab[] = [{ sessionId: 's1', agentId: 'agent-01', label: 's1', status: 'active', attentionState: 'running' }];
   await rehydrate(api, reg, tabs);
 
   const out = sink.written.join('');
@@ -48,8 +48,8 @@ test('rehydrate isolates per-tab failures', async () => {
     },
   } as unknown as ApiClient;
   const tabs: Tab[] = [
-    { sessionId: 's1', agentId: 'agent-01', label: 's1', status: 'active' },
-    { sessionId: 's2', agentId: 'agent-01', label: 's2', status: 'active' },
+    { sessionId: 's1', agentId: 'agent-01', label: 's1', status: 'active', attentionState: 'running' },
+    { sessionId: 's2', agentId: 'agent-01', label: 's2', status: 'active', attentionState: 'running' },
   ];
   await rehydrate(api, reg, tabs); // must not throw
   expect(sink.written.join('')).toContain('OK');

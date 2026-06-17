@@ -70,6 +70,24 @@ body {
   border-color: var(--accent);
 }
 
+/* Attention rings — pure CSS, driven by the attention-state enum.
+   blue = awaiting input, green = exited(0) success, red = error, running = neutral. */
+.tab.ring-awaiting-input {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.6);
+}
+
+.tab.ring-exited {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.55);
+}
+
+.tab.ring-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.55);
+}
+/* .tab.ring-running — neutral, no extra ring */
+
 .tab-close,
 .tab-new {
   background: transparent;

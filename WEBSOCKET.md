@@ -44,10 +44,39 @@ source of truth in [`src/server/ws-protocol.ts`](./src/server/ws-protocol.ts)
 | `stdout` | `{ type, sessionId, agentId, payload: string }` | one line of agent stdout |
 | `stderr` | `{ type, sessionId, agentId, payload: string }` | one line of agent stderr |
 | `exit`   | `{ type, sessionId, agentId, payload: { status, exitCode } }` | the agent process terminated |
+| `agentState` | `{ type, sessionId, agentId, state }` | an attention state-machine transition (`running` \| `awaiting-input` \| `exited` \| `error`) |
 | `error`  | `{ type, payload: string, sessionId?, agentId? }` | a problem with a prior client frame |
 
 All connected clients receive every agent's output (broadcast); the client
 filters by `sessionId` + `agentId`.
+
+## Attention state (rings)
+
+Each agent has an authoritative state machine in the orchestrator
+([`src/server/attention.ts`](./src/server/attention.ts)) whose value drives the
+console's attention rings. States and transitions:
+
+- `running` → `awaiting-input` when a **real stdout prompt** is detected, and
+  back to `running` when stdin is injected.
+- → `exited` **only** on a real process exit with code 0 (green), or `error` on a
+  non-zero exit or a stream/spawn error.
+
+Every transition is logged and broadcast as an `agentState` frame, and the
+current value is also surfaced in `GET /sessions` (`attentionState`) so the
+console can colour a ring before the stream connects.
+
+**Detection strategy.** `awaiting-input` is entered by matching newline-terminated
+stdout lines against a configurable regex list (`DEFAULT_PROMPT_PATTERNS`, or
+`EngineConfig.promptPatterns`) — a **real signal**, not a timeout/heuristic. The
+defaults cover generic `?`/`>`/`(y/n)`/`press enter` prompts and the confirmation
+phrasings of common CLI agents (Claude Code, Aider); the console renders the ring
+with **no per-agent code**. Limitation: a prompt printed without a trailing
+newline stays in the line buffer and is matched only once a newline arrives — a
+PTY-based enhancement is deferred to a later phase.
+
+**No false greens.** `exited` (green) is reachable solely via a real exit-code-0
+process exit — never inferred from output, prompts, or timeouts. This is enforced
+by the state machine and guarded by unit, integration, and console-render tests.
 
 ### Client → server
 
