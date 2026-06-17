@@ -64,8 +64,12 @@ test('HTTP: create a session, persist the graph, and flush agent output to the D
     body: JSON.stringify({ repoPath: null, command: ['sh', '-c', 'echo STARTED; sleep 30'], env: { FOO: 'bar' } }),
   });
   assert.equal(createRes.status, 201);
-  sessionID = (await createRes.json()).sessionID;
+  const created = await createRes.json();
+  sessionID = created.sessionId; // SessionSummary (camelCase) per AETHERMUX-13
   assert.match(sessionID, /^s-/);
+  assert.equal(created.status, 'active');
+  assert.match(created.agentId, /^agent-\d+$/);
+  assert.equal(created.attentionState, 'running');
 
   // Provisioned + spawned + persisted: the graph is queryable.
   const graph = await get(base, `/sessions/${sessionID}`);

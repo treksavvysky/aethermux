@@ -8,13 +8,21 @@ export {
   OrchestratorEngine,
   type EngineDeps,
   type EngineConfig,
-  type CreateSessionRequest,
   type RecoveryResult,
   type AgentLogEvent,
   type AgentExitEvent,
 } from './engine.js';
 export { createApp, type AppOptions } from './http.js';
 export { OPENAPI_SPEC } from './openapi.js';
+export {
+  deriveAttentionState,
+  type AttentionState,
+  type CreateSessionRequest,
+  type SessionSummary,
+  type CreateSessionResponse,
+  type TerminateResponse,
+  type ErrorResponse,
+} from './api-types.js';
 export { OrchestratorSocket, type WebSocketOptions } from './ws.js';
 export { isAuthorized, extractRequestToken } from './auth.js';
 export {

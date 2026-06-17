@@ -3,7 +3,15 @@ import { EventEmitter } from 'node:events';
 
 import type { SandboxProvisioner } from '../sandbox/index.js';
 import type { AgentHandle, LogEntry, Orchestrator } from '../orchestrator/index.js';
-import type { Session, SessionGraph, SessionStore } from '../persistence/index.js';
+import type { AgentProcess, Session, SessionGraph, SessionStore } from '../persistence/index.js';
+import {
+  deriveAttentionState,
+  type AttentionState,
+  type CreateSessionRequest,
+  type SessionSummary,
+} from './api-types.js';
+
+export type { CreateSessionRequest };
 
 /** Emitted (event `agentLog`) for every captured line of agent output. */
 export interface AgentLogEvent {
@@ -35,13 +43,8 @@ export interface EngineConfig {
   flushIntervalMs?: number;
   /** Working directory inside the sandbox. Default `/workspace`. */
   workspaceDir?: string;
-}
-
-/** Request body for {@link OrchestratorEngine.createSession}. */
-export interface CreateSessionRequest {
-  repoPath?: string | null;
-  command: string[];
-  env?: Record<string, string>;
+  /** Grace period for SIGTERM before SIGKILL when terminating. Default 10 s. */
+  terminateTimeoutSeconds?: number;
 }
 
 /** Outcome of a {@link OrchestratorEngine.recover} pass. */
@@ -79,6 +82,7 @@ export class OrchestratorEngine extends EventEmitter {
   private readonly spawner: Orchestrator;
   private readonly flushIntervalMs: number;
   private readonly workspaceDir: string;
+  private readonly terminateTimeoutSeconds: number;
 
   private readonly agents = new Map<string, AgentRecord>();
   private readonly sessions = new Set<string>();
@@ -92,6 +96,7 @@ export class OrchestratorEngine extends EventEmitter {
     this.spawner = deps.spawner;
     this.flushIntervalMs = config.flushIntervalMs ?? 1000;
     this.workspaceDir = config.workspaceDir ?? '/workspace';
+    this.terminateTimeoutSeconds = config.terminateTimeoutSeconds ?? 10;
   }
 
   /**
@@ -177,7 +182,60 @@ export class OrchestratorEngine extends EventEmitter {
     return this.store.listActiveSessions();
   }
 
-  /** Destroys a session: tears down its sandboxes and removes its rows. */
+  /** A console-facing summary of one session (or null if it does not exist). */
+  async getSessionSummary(sessionID: string): Promise<SessionSummary | null> {
+    const graph = await this.store.getSession(sessionID);
+    if (!graph) return null;
+    return this.toSummary(graph.session, graph.agents[0]);
+  }
+
+  /** Console-facing summaries of all active sessions, with attention state. */
+  async listSessionSummaries(): Promise<SessionSummary[]> {
+    const sessions = await this.store.listActiveSessions();
+    const summaries: SessionSummary[] = [];
+    for (const session of sessions) {
+      const graph = await this.store.getSession(session.sessionID);
+      summaries.push(this.toSummary(session, graph?.agents[0]));
+    }
+    return summaries;
+  }
+
+  /**
+   * Terminates a session: closes the agent's stdin (EOF), gracefully stops each
+   * sandbox container (Docker sends SIGTERM, then SIGKILL after the configured
+   * timeout), removes the containers, and deletes the session rows. After this
+   * the session no longer appears in {@link listSessionSummaries}. Returns false
+   * if the session does not exist.
+   */
+  async terminateSession(sessionID: string): Promise<boolean> {
+    const graph = await this.store.getSession(sessionID);
+    if (!graph) return false;
+
+    // Nudge stdin-blocked agents (e.g. `cat`) to exit cleanly on EOF first.
+    for (const rec of this.agents.values()) {
+      if (rec.sessionID === sessionID) {
+        try {
+          rec.handle.endInput();
+        } catch {
+          // ignore
+        }
+      }
+    }
+    // Graceful container stop (SIGTERM → SIGKILL after timeout), then remove.
+    for (const sandbox of graph.sandboxes) {
+      await this.provisioner
+        .stop(sandbox.containerID, { timeoutSeconds: this.terminateTimeoutSeconds })
+        .catch(() => undefined);
+      await this.provisioner.destroy(sandbox.containerID).catch(() => undefined);
+    }
+    for (const [agentID, rec] of this.agents) {
+      if (rec.sessionID === sessionID) this.agents.delete(agentID);
+    }
+    this.sessions.delete(sessionID);
+    return this.store.destroySession(sessionID);
+  }
+
+  /** Destroys a session: force-removes its sandboxes and removes its rows. */
   async destroySession(sessionID: string): Promise<boolean> {
     const graph = await this.store.getSession(sessionID);
     if (graph) {
@@ -190,6 +248,39 @@ export class OrchestratorEngine extends EventEmitter {
     }
     this.sessions.delete(sessionID);
     return this.store.destroySession(sessionID);
+  }
+
+  /** Builds a console summary, preferring live attention over the DB snapshot. */
+  private toSummary(session: Session, agent: AgentProcess | undefined): SessionSummary {
+    const live = this.liveRecord(session.sessionID);
+    let attentionState: AttentionState;
+    if (live?.exited) {
+      attentionState = deriveAttentionState(live.exited.status, live.exited.exitCode);
+    } else if (live) {
+      attentionState = 'running';
+    } else {
+      attentionState = deriveAttentionState(agent?.status, agent?.processExitCode ?? null);
+    }
+    const agentId = agent
+      ? agent.agentID.slice(session.sessionID.length + 1)
+      : live
+        ? live.handle.id
+        : null;
+    return {
+      sessionId: session.sessionID,
+      agentId,
+      status: session.status,
+      attentionState,
+      createdAt: session.createdAt.toISOString(),
+      repoPath: session.repoPath,
+    };
+  }
+
+  private liveRecord(sessionID: string): AgentRecord | undefined {
+    for (const rec of this.agents.values()) {
+      if (rec.sessionID === sessionID) return rec;
+    }
+    return undefined;
   }
 
   /**

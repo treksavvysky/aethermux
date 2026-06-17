@@ -136,6 +136,13 @@ curl -H "authorization: Bearer $TOKEN" localhost:8080/sessions/<sessionID>
 curl -X DELETE -H "authorization: Bearer $TOKEN" localhost:8080/sessions/<sessionID>
 ```
 
+`GET /sessions` returns a JSON array of session summaries — each with a real,
+lifecycle-derived `attentionState` (`running` | `awaiting-input` | `exited` |
+`error`) so the console can colour attention rings before the stream connects.
+`DELETE /sessions/:id` terminates gracefully (SIGTERM → SIGKILL). The full
+request/response contract is the TypeScript module `src/server/api-types.ts`
+(imported by the frontend) and the OpenAPI doc served at `GET /openapi.json`.
+
 See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for env vars, port config, and cloud VM
 setup, and [`WEBSOCKET.md`](./WEBSOCKET.md) for the real-time `/ws` transport.
 
