@@ -41,14 +41,21 @@ npm run build      # tsc --noEmit && vite build → dist/
 
 ### Pointing at an orchestrator
 
-The orchestrator API is **fail-closed**, so the console needs the shared token.
-Configure both via URL query params (defaults the API to the page origin):
+The orchestrator API is **fail-closed**, so the console needs the shared token,
+supplied as a URL query param. `?api=` defaults to the page origin.
 
-```
-http://localhost:5173/?api=http://localhost:8080&token=<AETHERMUX_API_TOKEN>
-```
+- **Bundled / same-origin** (the orchestrator serves this SPA — the default for
+  `docker compose up`): just the token, no `?api=`, no CORS:
+  ```
+  http://localhost:8080/?token=<AETHERMUX_API_TOKEN>
+  ```
+- **Served separately** (e.g. `vite dev`, or the standalone nginx image) — point
+  `?api=` at the orchestrator (CORS is enabled there for this case):
+  ```
+  http://localhost:5173/?api=http://localhost:8080&token=<AETHERMUX_API_TOKEN>
+  ```
 
-The WebSocket URL (`/ws?token=…`) is derived automatically.
+The WebSocket URL (`/ws?token=…`) is derived from `?api=` automatically.
 
 ## Security note — dev-toolchain advisories
 

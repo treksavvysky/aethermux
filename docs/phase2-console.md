@@ -17,25 +17,29 @@ WebSocket transport and session API.
 docker compose up --build
 ```
 
-This starts three services:
+This starts two services:
 
 | Service | Port | What |
 | --- | --- | --- |
 | `postgres` | 5432 | session-state DB |
-| `orchestrator` | 8080 | Phase 1 orchestrator: HTTP API + WebSocket `/ws` (mounts the Docker socket to provision sandboxes) |
-| `console` | 5173 | the static SPA, served by nginx |
+| `orchestrator` | 8080 | Phase 1 orchestrator: HTTP API + WebSocket `/ws` **and the console SPA**, all on one origin (mounts the Docker socket to provision sandboxes) |
 
-Then open the console, passing the orchestrator API base and the shared token as
-query params (the API is **fail-closed**; the console reaches it cross-origin and
-CORS is enabled on the orchestrator):
+The console is bundled into the orchestrator image and served at the same origin
+as the API, so there is **one port, one token, no `?api=`, and no CORS**. Open:
 
 ```
-http://localhost:5173/?api=http://localhost:8080&token=local-dev-token
+http://localhost:8080/?token=local-dev-token
 ```
 
 `local-dev-token` is the Compose default for `AETHERMUX_API_TOKEN`; override it
 (and any other variable from [`../.env.example`](../.env.example)) via the
 environment for anything beyond local dev. No other manual steps are required.
+
+> Serving the console separately is still supported: `console/Dockerfile` builds
+> a standalone nginx image, and the console reads `?api=`/`?token=` URL params
+> when it isn't same-origin (the orchestrator enables CORS for that case).
+> Accessing the stack from another machine? Tunnel the orchestrator port, e.g.
+> `ssh -L 8080:localhost:8080 you@host`, then open `http://localhost:8080/?token=…`.
 
 Tear down (drop the DB volume too with `-v`):
 

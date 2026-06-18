@@ -1,10 +1,10 @@
-# AetherMux — full local dev stack: PostgreSQL + orchestrator + Phase 2 console.
+# AetherMux — full local dev stack: PostgreSQL + orchestrator (which also serves
+# the Phase 2 console SPA on the same origin).
 #
 #   docker compose up --build
 #
-# Then open the console (it reaches the orchestrator cross-origin; pass the API
-# base + token as query params):
-#   http://localhost:5173/?api=http://localhost:8080&token=local-dev-token
+# Then open the console — one port, one token, no ?api=, no CORS:
+#   http://localhost:8080/?token=local-dev-token
 #
 # The orchestrator mounts the host Docker socket so it can provision *sibling*
 # sandbox containers on the host daemon (Phase 1 is a single-process,
@@ -56,18 +56,10 @@ services:
       # bind mounts for sandboxes resolve correctly.
       - /srv/aethermux/workspaces:/srv/aethermux/workspaces
 
-  # Phase 2 browser console — static SPA served by nginx. It talks to the
-  # orchestrator from the browser (cross-origin; CORS is enabled on the API),
-  # configured at runtime via ?api= and ?token= URL params (see the comment at
-  # the top of this file), so the image needs no build-time configuration.
-  console:
-    build:
-      context: .
-      dockerfile: console/Dockerfile
-    depends_on:
-      - orchestrator
-    ports:
-      - "5173:80"
+# The Phase 2 console is bundled into the orchestrator image (deploy/Dockerfile)
+# and served at http://localhost:8080/ — no separate service needed. The
+# standalone nginx image (console/Dockerfile) remains available for deployments
+# that prefer to serve the SPA separately.
 
 volumes:
   pgdata:

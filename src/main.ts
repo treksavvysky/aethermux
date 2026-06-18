@@ -46,11 +46,20 @@ async function main(): Promise<void> {
   );
   engine.start();
 
-  const server = createServer(createApp(engine, { token, corsOrigin: process.env.AETHERMUX_CORS_ORIGIN }));
+  const server = createServer(
+    createApp(engine, {
+      token,
+      corsOrigin: process.env.AETHERMUX_CORS_ORIGIN,
+      consoleDir: process.env.AETHERMUX_CONSOLE_DIR,
+    }),
+  );
   const socket = new OrchestratorSocket(engine, server, { token });
   server.listen(port, () => {
     console.log(`[aethermux] orchestrator listening on :${port} (HTTP + WebSocket /ws)`);
     console.log('[aethermux] API auth: shared token required (fail-closed)');
+    if (process.env.AETHERMUX_CONSOLE_DIR) {
+      console.log(`[aethermux] console UI served at http://localhost:${port}/?token=<AETHERMUX_API_TOKEN>`);
+    }
   });
 
   let shuttingDown = false;

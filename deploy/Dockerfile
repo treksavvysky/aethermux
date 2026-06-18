@@ -1,16 +1,24 @@
-# AetherMux orchestrator — deployment image (Phase 1 skeleton).
+# AetherMux orchestrator — deployment image.
 #
-# Multi-stage: build TypeScript in a full image, then run on a slim runtime.
-# This is a skeleton; runtime entrypoint and service wiring land with the
-# orchestrator implementation in later child issues.
+# Multi-stage: build the console SPA and the orchestrator, then run on a slim
+# runtime that serves BOTH the API/WebSocket and the console at the same origin
+# (so the browser needs only one port and a token — no ?api=, no CORS).
+# Build context is the repo root.
 
-# --- build stage -------------------------------------------------------------
+# --- console build -----------------------------------------------------------
+FROM node:20-slim AS console
+WORKDIR /app
+COPY console/package.json console/package-lock.json ./console/
+RUN cd console && npm ci
+COPY console ./console
+COPY src ./src
+RUN cd console && npm run build
+
+# --- orchestrator build ------------------------------------------------------
 FROM node:20-slim AS build
 WORKDIR /app
-
 COPY package.json package-lock.json* ./
 RUN npm ci
-
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
@@ -24,9 +32,12 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
+COPY --from=console /app/console/dist ./public
+# Serve the bundled console SPA at / (same origin as the API).
+ENV AETHERMUX_CONSOLE_DIR=/app/public
 
 # HTTP API port (override with the PORT env var).
 EXPOSE 8080
 
-# The orchestrator main loop: connect store → recover → serve HTTP API.
+# The orchestrator main loop: connect store → recover → serve API + console.
 CMD ["node", "dist/main.js"]
