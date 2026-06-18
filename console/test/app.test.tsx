@@ -102,3 +102,22 @@ test('renders tabs, routes WS output to the right terminal, sends stdin, creates
   // sanity: the empty-state copy is not shown while a tab exists.
   expect(() => getByText('No active sessions — click ＋ New to start one.')).toThrow();
 });
+
+test('renders a tab when sessions load AFTER the first render (async-load path)', async () => {
+  // Mirrors production: the store is empty at mount, then GET /sessions resolves
+  // and populates it. The tab must appear even though the data arrived after the
+  // initial render (regression for the useStore subscribe-timing race).
+  const store = new ConsoleStore(); // empty at mount
+  const registry = new TerminalRegistry();
+  const socket = { send: () => true } as unknown as ReconnectingSocket;
+  const api = {} as unknown as ApiClient;
+  const { factory } = makeFactory();
+
+  const { getByText, getByTestId } = render(
+    <App store={store} api={api} registry={registry} socket={socket} factory={factory} />,
+  );
+  expect(getByText('No active sessions — click ＋ New to start one.')).toBeTruthy();
+
+  store.setSessions([summary()]); // async load resolves after mount
+  await waitFor(() => expect(getByTestId('tab-s1/agent-01')).toBeTruthy());
+});
