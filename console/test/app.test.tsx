@@ -81,9 +81,21 @@ test('renders tabs, routes WS output to the right terminal, sends stdin, creates
   registry.route({ type: 'stdout', sessionId: 's1', agentId: 'agent-01', payload: 'HELLO-WS' });
   expect(created[0].written.join('')).toContain('HELLO-WS');
 
-  // criterion 3: characters typed in the terminal go out as stdin for that agent.
-  created[0].dataCb?.('x');
-  expect(send).toHaveBeenCalledWith({ type: 'stdin', sessionId: 's1', agentId: 'agent-01', data: 'x' });
+  // criterion 3: typed input is echoed locally and sent as a newline-terminated
+  // line on Enter (the exec has no PTY: no remote echo, and Enter emits '\r',
+  // which a line reader like `read` would never treat as end-of-line).
+  created[0].written.length = 0;
+  created[0].dataCb?.('h');
+  created[0].dataCb?.('i');
+  expect(created[0].written.join('')).toBe('hi'); // local echo, nothing sent yet
+  expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'stdin' }));
+  created[0].dataCb?.('\r'); // Enter
+  expect(send).toHaveBeenCalledWith({ type: 'stdin', sessionId: 's1', agentId: 'agent-01', data: 'hi\n' });
+  // backspace edits the pending line before it is sent.
+  created[0].dataCb?.('a');
+  created[0].dataCb?.('\x7f'); // erase the 'a'
+  created[0].dataCb?.('\r');
+  expect(send).toHaveBeenCalledWith({ type: 'stdin', sessionId: 's1', agentId: 'agent-01', data: '\n' });
 
   // criterion 4: create a session via the form; new tab appears without reload.
   fireEvent.click(getByTestId('new-session'));
