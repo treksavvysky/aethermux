@@ -105,6 +105,8 @@ test('consoleDir: the SPA is served publicly at / while API stays fail-closed', 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aethermux-console-'));
   await fs.writeFile(path.join(dir, 'index.html'), '<!doctype html><title>AetherMux Console</title><div id="app"></div>');
   await fs.writeFile(path.join(dir, 'app.js'), 'console.log("hi")');
+  await fs.mkdir(path.join(dir, 'assets'));
+  await fs.writeFile(path.join(dir, 'assets', 'index-abc123.js'), 'export default 1');
   const server = createApp(makeFakeEngine(), { token: 'secret', consoleDir: dir }).listen(0);
   await new Promise((r) => server.once('listening', r));
   const b = `http://127.0.0.1:${server.address().port}`;
@@ -114,6 +116,12 @@ test('consoleDir: the SPA is served publicly at / while API stays fail-closed', 
     assert.equal(index.status, 200);
     assert.match(await index.text(), /AetherMux Console/);
     assert.equal((await fetch(`${b}/app.js`)).status, 200);
+    // index.html is always revalidated (so a redeploy's new bundle is seen);
+    // the content-addressed /assets are cached immutably.
+    assert.match(index.headers.get('cache-control') ?? '', /no-cache/);
+    const asset = await fetch(`${b}/assets/index-abc123.js`);
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('cache-control') ?? '', /immutable/);
     // API routes still require the token (fail-closed) — static serving doesn't shadow them.
     assert.equal((await fetch(`${b}/sessions`)).status, 401);
     assert.equal((await fetch(`${b}/sessions?token=secret`)).status, 200);

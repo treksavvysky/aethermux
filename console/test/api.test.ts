@@ -43,6 +43,27 @@ test('terminateSession issues a DELETE', async () => {
   expect(method).toBe('DELETE');
 });
 
+test('the DEFAULT fetchFn calls the global fetch BARE (not as a method of the client)', async () => {
+  // Regression guard for the "Illegal invocation" bug: the default must invoke
+  // the global `fetch` without binding it to the ApiClient instance. We stub the
+  // global and assert `this` inside it is never the client — which is exactly
+  // what avoids the browser throw. A raw `fetchFn = fetch` default would make
+  // `this` the instance here and fail.
+  const original = globalThis.fetch;
+  let receiver: unknown = 'unset';
+  globalThis.fetch = function (this: unknown) {
+    receiver = this;
+    return Promise.resolve(jsonResponse([{ sessionId: 's-real' }]));
+  } as unknown as typeof fetch;
+  try {
+    const api = new ApiClient({ baseUrl: 'http://o', token: 't' }); // default fetchFn
+    expect(await api.listSessions()).toEqual([{ sessionId: 's-real' }]);
+    expect(receiver).not.toBe(api);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('getSessionGraph fetches the session graph', async () => {
   const fetchFn = (async (url: string) => {
     expect(url).toBe('http://o/sessions/s1');

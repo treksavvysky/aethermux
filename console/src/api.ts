@@ -13,7 +13,11 @@ export interface ApiConfig {
 export class ApiClient {
   constructor(
     private readonly cfg: ApiConfig,
-    private readonly fetchFn: typeof fetch = fetch,
+    // Wrap the global `fetch` rather than storing it directly: calling
+    // `this.fetchFn(...)` invokes it as a method of this instance, and the
+    // browser's `fetch` throws `TypeError: Illegal invocation` unless it is
+    // called bound to the global. The arrow calls it bare, which is well-formed.
+    private readonly fetchFn: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   private authHeaders(extra: Record<string, string> = {}): Record<string, string> {
