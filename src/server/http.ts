@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 
 import { isAuthorized } from './auth.js';
@@ -72,7 +74,21 @@ export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Ex
   // Static assets (index.html, /assets/*) must load before the SPA has a token;
   // requests for API paths fall through to the auth + routes below.
   if (opts.consoleDir) {
-    app.use(express.static(opts.consoleDir));
+    app.use(
+      express.static(opts.consoleDir, {
+        // The HTML entrypoint must always be revalidated so a redeploy (which
+        // emits a new hashed bundle) is picked up without a manual cache clear.
+        // The hashed assets under /assets are content-addressed, so they can be
+        // cached forever.
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      }),
+    );
   }
 
   app.use((req: Request, res: Response, next: NextFunction) => {

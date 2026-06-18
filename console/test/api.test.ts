@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+
 import { test, expect } from 'vitest';
 
 import { ApiClient } from '../src/api';
@@ -41,6 +43,30 @@ test('terminateSession issues a DELETE', async () => {
   const api = new ApiClient({ baseUrl: 'http://o', token: 't' }, fetchFn);
   await api.terminateSession('s1');
   expect(method).toBe('DELETE');
+});
+
+test('the DEFAULT fetch (no injected fake) reaches a real server', async () => {
+  // Guards the production path: ApiClient must call the global `fetch` without
+  // losing its binding. Constructing with no fetchFn exercises the real default
+  // against a live server (in the browser, `this.fetchFn = fetch` would throw
+  // "Illegal invocation"; the wrapped default does not).
+  const server = createServer((req, res) => {
+    if (req.url === '/sessions') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify([{ sessionId: 's-real' }]));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const { port } = server.address() as { port: number };
+  try {
+    const api = new ApiClient({ baseUrl: `http://127.0.0.1:${port}`, token: 't' }); // default fetchFn
+    expect(await api.listSessions()).toEqual([{ sessionId: 's-real' }]);
+  } finally {
+    server.close();
+  }
 });
 
 test('getSessionGraph fetches the session graph', async () => {
