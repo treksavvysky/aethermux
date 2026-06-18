@@ -103,6 +103,30 @@ test('renders tabs, routes WS output to the right terminal, sends stdin, creates
   expect(() => getByText('No active sessions — click ＋ New to start one.')).toThrow();
 });
 
+test('replays persisted history into a terminal on mount (parked-session path)', async () => {
+  // A session already parked at a prompt has all its output in the past — no new
+  // WS frames will arrive. The terminal must show that history on first mount,
+  // hydrated from GET /sessions/:id, or the user sees a blank pane.
+  const store = new ConsoleStore();
+  store.setSessions([summary()]);
+  const registry = new TerminalRegistry();
+  const socket = { send: () => true } as unknown as ReconnectingSocket;
+  const api = {
+    getSessionGraph: vi.fn(async (id: string) => ({
+      session: { sessionID: id, status: 'active' },
+      sandboxes: [],
+      agents: [{ agentID: 's1:agent-01', stdoutBuffer: 'Continue? [y/N]', stderrBuffer: '' }],
+    })),
+  } as unknown as ApiClient;
+  const { factory, created } = makeFactory();
+
+  render(<App store={store} api={api} registry={registry} socket={socket} factory={factory} />);
+
+  await waitFor(() => expect(created.length).toBe(1));
+  await waitFor(() => expect(created[0].written.join('')).toContain('Continue? [y/N]'));
+  expect(api.getSessionGraph).toHaveBeenCalledWith('s1');
+});
+
 test('renders a tab when sessions load AFTER the first render (async-load path)', async () => {
   // Mirrors production: the store is empty at mount, then GET /sessions resolves
   // and populates it. The tab must appear even though the data arrived after the
