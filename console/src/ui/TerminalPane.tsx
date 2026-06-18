@@ -11,6 +11,9 @@ interface TerminalPaneProps {
   registry: TerminalRegistry;
   socket: ReconnectingSocket;
   factory: TerminalFactory;
+  /** Called once the terminal has mounted and registered its sink, so the caller
+   * can replay persisted history into a session that's already parked. */
+  onMount?: () => void;
 }
 
 /**
@@ -22,7 +25,7 @@ interface TerminalPaneProps {
  * This component is **agent-agnostic** — every tab uses this same component and
  * factory; there is no per-agent rendering branch.
  */
-export function TerminalPane({ tab, visible, registry, socket, factory }: TerminalPaneProps) {
+export function TerminalPane({ tab, visible, registry, socket, factory, onMount }: TerminalPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const handle = useRef<TerminalHandle | null>(null);
 
@@ -34,6 +37,7 @@ export function TerminalPane({ tab, visible, registry, socket, factory }: Termin
     term.onData((data) => {
       socket.send({ type: 'stdin', sessionId: tab.sessionId, agentId: tab.agentId, data });
     });
+    onMount?.(); // sink is now registered → safe to replay persisted history
     return () => {
       registry.unregister(tab.sessionId, tab.agentId);
       term.dispose();

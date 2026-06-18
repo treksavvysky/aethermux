@@ -7,6 +7,7 @@ import type { TerminalRegistry } from '../registry';
 import type { ReconnectingSocket } from '../socket';
 import type { CreateSessionRequest } from '../protocol';
 import { createXtermTerminal, type TerminalFactory } from '../terminal';
+import { hydrateTab } from '../hydrate';
 import { useStore } from './useStore';
 import { TabBar } from './TabBar';
 import { TerminalPane } from './TerminalPane';
@@ -68,6 +69,7 @@ export function App({ store, api, registry, socket, factory = createXtermTermina
               registry={registry}
               socket={socket}
               factory={factory}
+              onMount={() => void hydrateTab(api, registry, tab)}
             />
           ))
         )}
