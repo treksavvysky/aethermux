@@ -14,6 +14,13 @@ export interface AppOptions {
    * access control, not the origin). Set to a specific origin to lock it down.
    */
   corsOrigin?: string;
+  /**
+   * Directory of the built console SPA to serve at `/` (same origin as the API,
+   * so no `?api=` or CORS needed). When unset, the API runs without a UI. The
+   * static assets are public (the SPA must load before it has a token); the API
+   * routes remain fail-closed behind the shared token.
+   */
+  consoleDir?: string;
 }
 
 /** Wraps an async handler so rejections become a 500 instead of crashing. */
@@ -60,6 +67,13 @@ export function createApp(engine: OrchestratorEngine, opts: AppOptions = {}): Ex
   app.get('/healthz', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
   });
+
+  // Serve the console SPA (public) at the same origin as the API, when bundled.
+  // Static assets (index.html, /assets/*) must load before the SPA has a token;
+  // requests for API paths fall through to the auth + routes below.
+  if (opts.consoleDir) {
+    app.use(express.static(opts.consoleDir));
+  }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (isAuthorized(req, opts.token)) {

@@ -116,11 +116,11 @@ WEBSOCKET.md        # real-time streaming protocol (/ws framing + auth)
 ```
 
 The **Phase 2 web console** (a browser-only tabbed dashboard of live xterm.js
-terminals over `/ws`, with attention rings) lives in [`console/`](./console/).
-Run the **full stack** (postgres + orchestrator + console) with
-`docker compose up --build`, then open
-`http://localhost:5173/?api=http://localhost:8080&token=local-dev-token`. See
-[`docs/phase2-console.md`](./docs/phase2-console.md) for the full-stack guide,
+terminals over `/ws`, with attention rings) lives in [`console/`](./console/) and
+is served by the orchestrator at the same origin. Run the **full stack**
+(postgres + orchestrator) with `docker compose up --build`, then open
+`http://localhost:8080/?token=local-dev-token` — one port, one token, no CORS.
+See [`docs/phase2-console.md`](./docs/phase2-console.md) for the full-stack guide,
 running CI checks locally, and the WebSocket envelope reference.
 
 ---

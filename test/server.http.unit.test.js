@@ -1,5 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { createApp } from '../dist/index.js';
 
@@ -96,6 +99,29 @@ test('DELETE /sessions/:id terminates (200) or 404; uses graceful terminateSessi
   // GET /sessions/:id still 200/404 (graph endpoint retained).
   assert.equal((await fetch(authed('/sessions/known'))).status, 200);
   assert.equal((await fetch(authed('/sessions/missing'))).status, 404);
+});
+
+test('consoleDir: the SPA is served publicly at / while API stays fail-closed', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aethermux-console-'));
+  await fs.writeFile(path.join(dir, 'index.html'), '<!doctype html><title>AetherMux Console</title><div id="app"></div>');
+  await fs.writeFile(path.join(dir, 'app.js'), 'console.log("hi")');
+  const server = createApp(makeFakeEngine(), { token: 'secret', consoleDir: dir }).listen(0);
+  await new Promise((r) => server.once('listening', r));
+  const b = `http://127.0.0.1:${server.address().port}`;
+  try {
+    // SPA index + assets load with no token (public).
+    const index = await fetch(`${b}/`);
+    assert.equal(index.status, 200);
+    assert.match(await index.text(), /AetherMux Console/);
+    assert.equal((await fetch(`${b}/app.js`)).status, 200);
+    // API routes still require the token (fail-closed) — static serving doesn't shadow them.
+    assert.equal((await fetch(`${b}/sessions`)).status, 401);
+    assert.equal((await fetch(`${b}/sessions?token=secret`)).status, 200);
+    assert.equal((await fetch(`${b}/healthz`)).status, 200);
+  } finally {
+    server.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('CORS: preflight is answered without auth; responses carry CORS headers', async () => {
